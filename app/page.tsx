@@ -19,6 +19,7 @@ type SpeechSpeed = "slow" | "normal";
 const STORAGE_KEY = "vocab6004-progress-v1";
 const SETTINGS_KEY = "vocab6004-settings-v1";
 const WORDS_PER_DAY = 50;
+const BASE_PATH = "/vocabflow-6004";
 const today = new Date().toISOString().slice(0, 10);
 
 const statusMeta: Record<WordStatus, { label: string; icon: string }> = {
@@ -85,7 +86,7 @@ export default function Home() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/vocab.json").then((res) => res.json()),
+      fetch(`${BASE_PATH}/vocab.json`).then((res) => res.json()),
       Promise.resolve(localStorage.getItem(STORAGE_KEY)),
       Promise.resolve(localStorage.getItem(SETTINGS_KEY)),
     ]).then(([data, savedStatuses, savedSettings]) => {
