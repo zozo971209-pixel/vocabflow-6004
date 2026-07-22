@@ -126,6 +126,10 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .source-banner strong { display: block; font-size: 13px; }
 .source-banner p { margin: 5px 0 0; color: #66708b; font-size: 11px; line-height: 1.55; }
 .source-banner button { border: 0; background: transparent; color: var(--indigo); font-size: 11px; font-weight: 800; }
+.site-footer { padding: 25px 4px 0; text-align: center; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.site-footer p { margin: 2px 0; }
+.site-footer a { color: var(--indigo); font-weight: 750; text-decoration: none; }
+.site-footer a:hover { text-decoration: underline; }
 
 .modal-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(17,24,46,.48); display: grid; place-items: center; padding: 20px; backdrop-filter: blur(5px); }
 .modal { width: min(460px, 100%); max-height: calc(100vh - 40px); overflow: auto; background: white; border-radius: 20px; padding: 30px; box-shadow: 0 28px 80px rgba(17,24,46,.25); position: relative; }
@@ -142,6 +146,17 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .fixed-setting small { grid-column: 1 / -1; color: var(--muted); line-height: 1.5; }
 .plan-summary { display: flex; justify-content: space-between; gap: 10px; background: #f4f3ff; border-radius: 12px; padding: 14px; margin: 20px 0 14px; font-size: 11px; }
 .plan-summary span { color: var(--indigo); font-weight: 800; }
+.backup-panel { border: 1px solid var(--line); border-radius: 13px; padding: 15px; margin: 0 0 14px; background: #fafbfe; }
+.backup-panel strong { font-size: 13px; }
+.backup-panel > div > p { margin: 5px 0 12px; color: var(--muted); font-size: 11px; line-height: 1.55; }
+.backup-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.backup-button { border: 1px solid #d9dcff; border-radius: 10px; padding: 10px 8px; background: white; color: var(--indigo); font-size: 11px; font-weight: 800; }
+.backup-button.export { background: #f0f1ff; }
+.backup-button:hover { border-color: #aaa7ff; }
+.hidden-file-input { display: none; }
+.backup-feedback { margin: 10px 0 0; border-radius: 8px; padding: 8px 10px; font-size: 10px; line-height: 1.5; }
+.backup-feedback.success { color: #0e7850; background: #eaf8f2; }
+.backup-feedback.error { color: #b53145; background: #fff0f2; }
 .info-modal { width: min(540px, 100%); }
 .info-block { padding: 14px 0; border-top: 1px solid var(--line); }
 .info-block strong { font-size: 13px; }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type Word = {
   id: number;
@@ -15,6 +15,7 @@ type Word = {
 type WordStatus = "known" | "review" | "unknown";
 type StatusMap = Record<number, WordStatus>;
 type SpeechSpeed = "slow" | "normal";
+type BackupFeedback = { type: "success" | "error"; text: string } | null;
 
 const STORAGE_KEY = "vocab6004-progress-v1";
 const SETTINGS_KEY = "vocab6004-settings-v1";
@@ -72,6 +73,7 @@ function formatDate(dateString: string, offset: number) {
 }
 
 export default function Home() {
+  const importInputRef = useRef<HTMLInputElement>(null);
   const [words, setWords] = useState<Word[]>([]);
   const [statuses, setStatuses] = useState<StatusMap>({});
   const [currentDay, setCurrentDay] = useState(1);
@@ -82,6 +84,7 @@ export default function Home() {
   const [levelFilter, setLevelFilter] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [backupFeedback, setBackupFeedback] = useState<BackupFeedback>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -148,6 +151,81 @@ export default function Home() {
   function changeDay(next: number) {
     setCurrentDay(Math.max(1, Math.min(totalDays, next)));
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function exportProgress() {
+    const backup = {
+      format: "vocabflow-progress",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      app: "詞序 VocabFlow",
+      progress: {
+        statuses,
+        settings: { currentDay: safeDay, startDate, speechSpeed },
+      },
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `VocabFlow-進度備份-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setBackupFeedback({ type: "success", text: "備份檔已匯出，請妥善保存在手機檔案或雲端硬碟。" });
+  }
+
+  async function importProgress(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    try {
+      const backup = JSON.parse(await file.text()) as Record<string, unknown>;
+      if (backup.format !== "vocabflow-progress" || backup.version !== 1) {
+        throw new Error("這不是 VocabFlow 支援的進度備份檔。");
+      }
+
+      const progress = backup.progress as Record<string, unknown> | undefined;
+      const importedStatuses = progress?.statuses as Record<string, unknown> | undefined;
+      const importedSettings = progress?.settings as Record<string, unknown> | undefined;
+      if (!progress || !importedStatuses || !importedSettings) {
+        throw new Error("備份檔缺少必要的進度資料。");
+      }
+
+      const validIds = new Set(words.map((word) => word.id));
+      const nextStatuses: StatusMap = {};
+      for (const [rawId, value] of Object.entries(importedStatuses)) {
+        const id = Number(rawId);
+        if (validIds.has(id) && (value === "known" || value === "review" || value === "unknown")) {
+          nextStatuses[id] = value;
+        }
+      }
+
+      const rawDay = importedSettings.currentDay;
+      const rawStartDate = importedSettings.startDate;
+      const rawSpeed = importedSettings.speechSpeed;
+      if (typeof rawDay !== "number" || !Number.isFinite(rawDay) ||
+          typeof rawStartDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(rawStartDate) ||
+          (rawSpeed !== "slow" && rawSpeed !== "normal")) {
+        throw new Error("備份檔中的學習設定格式不正確。");
+      }
+
+      setStatuses(nextStatuses);
+      setCurrentDay(Math.max(1, Math.min(totalDays, Math.round(rawDay))));
+      setStartDate(rawStartDate);
+      setSpeechSpeed(rawSpeed);
+      setBackupFeedback({
+        type: "success",
+        text: `匯入完成，已恢復 ${Object.keys(nextStatuses).length} 個單字標記與學習設定。`,
+      });
+    } catch (error) {
+      setBackupFeedback({
+        type: "error",
+        text: error instanceof Error ? error.message : "匯入失敗，請確認選擇正確的備份檔。",
+      });
+    }
   }
 
   if (!loaded) {
@@ -267,6 +345,11 @@ export default function Home() {
           <div><strong>為什麼不是剛好 7,000 個？</strong><p>「高中 7,000 單字」是常見俗稱；本網站採用大考中心 111 學年度起適用版本，共 6,004 個官方詞條。</p></div>
           <button onClick={() => setInfoOpen(true)}>查看資料說明 →</button>
         </aside>
+
+        <footer className="site-footer">
+          <p>© 2026 zozo971209-pixel · 網站程式、介面與編排保留所有權利。</p>
+          <p>詞彙及字典資料的權利屬原資料提供者，詳見 <a href={`${BASE_PATH}/RIGHTS.md`} target="_blank" rel="noreferrer">權利說明</a> 與 <a href="https://github.com/zozo971209-pixel/vocabflow-6004" target="_blank" rel="noreferrer">GitHub 原始專案</a>。</p>
+        </footer>
       </div>
 
       {settingsOpen && (
@@ -278,6 +361,15 @@ export default function Home() {
             <label><span>目前天數 <small>1–{totalDays}</small></span><input type="number" min="1" max={totalDays} value={safeDay} onChange={(e) => changeDay(Number(e.target.value))} /></label>
             <label><span>學習起始日</span><input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} /></label>
             <div className="plan-summary"><strong>{words.length.toLocaleString()} 個詞條 · 每天 50 個</strong><span>共 {totalDays} 天完成</span></div>
+            <section className="backup-panel" aria-labelledby="backup-title">
+              <div><strong id="backup-title">進度備份與換機轉移</strong><p>舊手機先匯出，新手機再匯入；檔案包含單字標記與學習設定，不會上傳到伺服器。</p></div>
+              <div className="backup-actions">
+                <button type="button" className="backup-button export" onClick={exportProgress}>↓ 匯出進度</button>
+                <button type="button" className="backup-button import" onClick={() => importInputRef.current?.click()}>↑ 匯入進度</button>
+                <input ref={importInputRef} className="hidden-file-input" type="file" accept=".json,application/json" onChange={importProgress} />
+              </div>
+              {backupFeedback && <p className={`backup-feedback ${backupFeedback.type}`} role="status">{backupFeedback.text}</p>}
+            </section>
             <button className="primary-button full" onClick={() => setSettingsOpen(false)}>儲存並返回學習</button>
           </section>
         </div>
