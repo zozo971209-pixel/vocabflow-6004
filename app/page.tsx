@@ -14,6 +14,7 @@ type Word = {
 
 type WordStatus = "known" | "review" | "unknown";
 type StatusMap = Record<number, WordStatus>;
+type SpeechSpeed = "slow" | "normal";
 
 const STORAGE_KEY = "vocab6004-progress-v1";
 const SETTINGS_KEY = "vocab6004-settings-v1";
@@ -25,12 +26,32 @@ const statusMeta: Record<WordStatus, { label: string; icon: string }> = {
   unknown: { label: "不熟", icon: "!" },
 };
 
-function speak(text: string, lang: "en-US" | "zh-TW") {
+function cleanSpeechText(text: string, lang: "en-US" | "zh-TW") {
+  if (lang === "en-US") {
+    return text
+      .replace(/\//g, " or ")
+      .replace(/&/g, " and ")
+      .replace(/[()[\]{}*_~|\\]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  return text
+    .replace(/\[[^\]]+\]/g, "")
+    .replace(/^\s*(?:vt|vi|v|n|a|ad|adj|adv|prep|pron|conj|art|num)\.\s*/gim, "")
+    .replace(/[\/\\|*_~]/g, "，")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function speak(text: string, lang: "en-US" | "zh-TW", speed: SpeechSpeed) {
   if (!("speechSynthesis" in window)) return;
   window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text.replace(/\[[^\]]+\]/g, ""));
+  const utterance = new SpeechSynthesisUtterance(cleanSpeechText(text, lang));
   utterance.lang = lang;
-  utterance.rate = lang === "en-US" ? 0.82 : 0.92;
+  utterance.rate = speed === "slow"
+    ? (lang === "en-US" ? 0.68 : 0.78)
+    : (lang === "en-US" ? 0.82 : 0.92);
   const voices = window.speechSynthesis.getVoices();
   utterance.voice = voices.find((voice) => voice.lang === lang) ??
     voices.find((voice) => voice.lang.startsWith(lang.slice(0, 2))) ?? null;
@@ -53,6 +74,7 @@ export default function Home() {
   const [wordsPerDay, setWordsPerDay] = useState(50);
   const [currentDay, setCurrentDay] = useState(1);
   const [startDate, setStartDate] = useState(today);
+  const [speechSpeed, setSpeechSpeed] = useState<SpeechSpeed>("slow");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | WordStatus | "unmarked">("all");
   const [levelFilter, setLevelFilter] = useState(0);
@@ -73,6 +95,7 @@ export default function Home() {
         setWordsPerDay(settings.wordsPerDay ?? 50);
         setCurrentDay(settings.currentDay ?? 1);
         setStartDate(settings.startDate ?? today);
+        setSpeechSpeed(settings.speechSpeed ?? "slow");
       }
       setLoaded(true);
     }).catch(() => setLoaded(true));
@@ -85,8 +108,8 @@ export default function Home() {
 
   useEffect(() => {
     if (!loaded) return;
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ wordsPerDay, currentDay, startDate }));
-  }, [wordsPerDay, currentDay, startDate, loaded]);
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ wordsPerDay, currentDay, startDate, speechSpeed }));
+  }, [wordsPerDay, currentDay, startDate, speechSpeed, loaded]);
 
   const totalDays = Math.max(1, Math.ceil(words.length / wordsPerDay));
   const safeDay = Math.min(currentDay, totalDays);
@@ -194,6 +217,9 @@ export default function Home() {
             <option value="unknown">不熟</option>
             <option value="unmarked">未標記</option>
           </select>
+          <button className="speech-mode" onClick={() => setSpeechSpeed((value) => value === "slow" ? "normal" : "slow")} aria-label="切換朗讀速度">
+            <span>▶</span>朗讀：{speechSpeed === "slow" ? "慢速" : "正常"}
+          </button>
         </section>
 
         <div className="list-heading">
@@ -213,11 +239,11 @@ export default function Home() {
                 </div>
                 <div className="word-line">
                   <div><h3>{word.word}</h3><p>{word.pos} <span>{word.phonetic && `/ ${word.phonetic} /`}</span></p></div>
-                  <button className="speak-button" onClick={() => speak(word.word, "en-US")} aria-label={`朗讀 ${word.word}`}>▶<small>EN</small></button>
+                  <button className="speak-button" onClick={() => speak(word.word, "en-US", speechSpeed)} aria-label={`朗讀 ${word.word}`}>▶<small>EN</small></button>
                 </div>
                 <div className="meaning">
                   <p>{word.meaning}</p>
-                  <button className="speak-link" onClick={() => speak(word.meaning, "zh-TW")}>▶ 中文朗讀</button>
+                  <button className="speak-link" onClick={() => speak(word.meaning, "zh-TW", speechSpeed)}>▶ 中文朗讀</button>
                 </div>
                 {word.note && <p className="note">備註：{word.note}</p>}
                 <div className="status-actions" role="group" aria-label={`${word.word} 的熟悉度`}>
