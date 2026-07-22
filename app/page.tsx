@@ -18,6 +18,7 @@ type SpeechSpeed = "slow" | "normal";
 
 const STORAGE_KEY = "vocab6004-progress-v1";
 const SETTINGS_KEY = "vocab6004-settings-v1";
+const WORDS_PER_DAY = 50;
 const today = new Date().toISOString().slice(0, 10);
 
 const statusMeta: Record<WordStatus, { label: string; icon: string }> = {
@@ -28,6 +29,7 @@ const statusMeta: Record<WordStatus, { label: string; icon: string }> = {
 
 function cleanSpeechText(text: string, lang: "en-US" | "zh-TW") {
   if (lang === "en-US") {
+    if (text.trim().toLowerCase() === "a/an") return "a book. an apple.";
     return text
       .replace(/\//g, " or ")
       .replace(/&/g, " and ")
@@ -71,7 +73,6 @@ function formatDate(dateString: string, offset: number) {
 export default function Home() {
   const [words, setWords] = useState<Word[]>([]);
   const [statuses, setStatuses] = useState<StatusMap>({});
-  const [wordsPerDay, setWordsPerDay] = useState(50);
   const [currentDay, setCurrentDay] = useState(1);
   const [startDate, setStartDate] = useState(today);
   const [speechSpeed, setSpeechSpeed] = useState<SpeechSpeed>("slow");
@@ -92,7 +93,6 @@ export default function Home() {
       if (savedStatuses) setStatuses(JSON.parse(savedStatuses));
       if (savedSettings) {
         const settings = JSON.parse(savedSettings);
-        setWordsPerDay(settings.wordsPerDay ?? 50);
         setCurrentDay(settings.currentDay ?? 1);
         setStartDate(settings.startDate ?? today);
         setSpeechSpeed(settings.speechSpeed ?? "slow");
@@ -108,15 +108,15 @@ export default function Home() {
 
   useEffect(() => {
     if (!loaded) return;
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ wordsPerDay, currentDay, startDate, speechSpeed }));
-  }, [wordsPerDay, currentDay, startDate, speechSpeed, loaded]);
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ currentDay, startDate, speechSpeed }));
+  }, [currentDay, startDate, speechSpeed, loaded]);
 
-  const totalDays = Math.max(1, Math.ceil(words.length / wordsPerDay));
+  const totalDays = Math.max(1, Math.ceil(words.length / WORDS_PER_DAY));
   const safeDay = Math.min(currentDay, totalDays);
   const dayWords = useMemo(() => {
-    const start = (safeDay - 1) * wordsPerDay;
-    return words.slice(start, start + wordsPerDay);
-  }, [words, wordsPerDay, safeDay]);
+    const start = (safeDay - 1) * WORDS_PER_DAY;
+    return words.slice(start, start + WORDS_PER_DAY);
+  }, [words, safeDay]);
 
   const filteredWords = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -128,8 +128,8 @@ export default function Home() {
         (statusFilter === "unmarked" ? !statuses[word.id] : statuses[word.id] === statusFilter);
       const matchesLevel = levelFilter === 0 || word.level === levelFilter;
       return matchesQuery && matchesStatus && matchesLevel;
-    }).slice(0, normalized ? 120 : wordsPerDay);
-  }, [query, words, dayWords, statusFilter, levelFilter, statuses, wordsPerDay]);
+    }).slice(0, normalized ? 120 : WORDS_PER_DAY);
+  }, [query, words, dayWords, statusFilter, levelFilter, statuses]);
 
   const allCounts = useMemo(() => ({
     known: Object.values(statuses).filter((s) => s === "known").length,
@@ -147,12 +147,6 @@ export default function Home() {
   function changeDay(next: number) {
     setCurrentDay(Math.max(1, Math.min(totalDays, next)));
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function applyWordsPerDay(value: number) {
-    const next = Math.max(10, Math.min(100, value || 50));
-    setWordsPerDay(next);
-    setCurrentDay((day) => Math.min(day, Math.max(1, Math.ceil(words.length / next))));
   }
 
   if (!loaded) {
@@ -177,7 +171,7 @@ export default function Home() {
           <div>
             <p className="eyebrow">YOUR DAILY VOCABULARY</p>
             <h1>今天，再前進 <span>{dayWords.length}</span> 個單字。</h1>
-            <p>按官方六級由淺入深安排；完成標記會自動保存在這台裝置。</p>
+            <p>每天混合第 1–6 級與不同字首；完成標記會自動保存在這台裝置。</p>
           </div>
           <div className="day-switcher" aria-label="切換學習天數">
             <button onClick={() => changeDay(safeDay - 1)} disabled={safeDay <= 1} aria-label="前一天">←</button>
@@ -224,13 +218,13 @@ export default function Home() {
 
         <div className="list-heading">
           <div><p>{query ? "全表搜尋結果" : `DAY ${safeDay} · TODAY'S WORDS`}</p><h2>{query ? `找到 ${filteredWords.length}${filteredWords.length === 120 ? "+" : ""} 筆` : "今日單字"}</h2></div>
-          <p className="sorting-note">難度依官方級別 1 → 6 排列</p>
+          <p className="sorting-note">每日六級平均混合 · 固定 50 詞</p>
         </div>
 
         <section className="word-grid" aria-live="polite">
           {filteredWords.map((word) => {
             const status = statuses[word.id];
-            const dayRank = words.indexOf(word) % wordsPerDay + 1;
+            const dayRank = words.indexOf(word) % WORDS_PER_DAY + 1;
             return (
               <article className={`word-card ${status ? `is-${status}` : ""}`} key={word.id}>
                 <div className="card-topline">
@@ -279,10 +273,10 @@ export default function Home() {
           <section className="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" onMouseDown={(e) => e.stopPropagation()}>
             <button className="modal-close" onClick={() => setSettingsOpen(false)} aria-label="關閉">×</button>
             <p className="eyebrow">LEARNING PLAN</p><h2 id="settings-title">調整學習計畫</h2>
-            <label><span>每天單字數 <small>10–100</small></span><input type="number" min="10" max="100" value={wordsPerDay} onChange={(e) => applyWordsPerDay(Number(e.target.value))} /></label>
+            <div className="fixed-setting"><span>每天單字數</span><strong>固定 50 詞</strong><small>因總數為 6,004，第 121 天是最後 4 詞。</small></div>
             <label><span>目前天數 <small>1–{totalDays}</small></span><input type="number" min="1" max={totalDays} value={safeDay} onChange={(e) => changeDay(Number(e.target.value))} /></label>
             <label><span>學習起始日</span><input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} /></label>
-            <div className="plan-summary"><strong>{words.length.toLocaleString()} 個詞條 ÷ 每天 {wordsPerDay} 個</strong><span>預計 {totalDays} 天完成</span></div>
+            <div className="plan-summary"><strong>{words.length.toLocaleString()} 個詞條 · 每天 50 個</strong><span>共 {totalDays} 天完成</span></div>
             <button className="primary-button full" onClick={() => setSettingsOpen(false)}>儲存並返回學習</button>
           </section>
         </div>
@@ -295,7 +289,7 @@ export default function Home() {
             <p className="eyebrow">ABOUT THE DATA</p><h2 id="info-title">資料範圍與排序方式</h2>
             <div className="info-block"><strong>6,004 個官方詞條</strong><p>英文詞彙、詞性與六級分級來自大學入學考試中心《高中英文參考詞彙表（111學年度起適用）》。</p></div>
             <div className="info-block"><strong>中文不是大考中心官方翻譯</strong><p>中文釋義與音標由原 Excel 中的開源 ECDICT 英漢字典資料補充。</p></div>
-            <div className="info-block"><strong>由淺入深，不假裝精確</strong><p>網站先按官方第 1 級至第 6 級排序，同級內按英文排列。卡片的 1–50 是當日學習順序；官方級別是參考分級，不等同每個詞的絕對難度排名。</p></div>
+            <div className="info-block"><strong>每日混合六級與不同字首</strong><p>每天固定安排 50 詞，第 1–6 級各約 8–9 詞，並分散不同英文字母開頭；卡片的 1–50 是當日學習順序。因官方總數為 6,004，第 121 天是剩餘的最後 4 詞。</p></div>
             <a className="source-link" href="https://www.ceec.edu.tw/files/file_pool/1/0k213571061045122620/%E9%AB%98%E4%B8%AD%E8%8B%B1%E6%96%87%E5%8F%83%E8%80%83%E8%A9%9E%E5%BD%99%E8%A1%A8%28111%E5%AD%B8%E5%B9%B4%E5%BA%A6%E8%B5%B7%E9%81%A9%E7%94%A8%29.pdf" target="_blank" rel="noreferrer">查看大考中心原始詞彙表 ↗</a>
           </section>
         </div>
