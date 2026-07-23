@@ -40,6 +40,7 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .hero h1 { margin: 0; font-size: clamp(29px, 3.3vw, 46px); letter-spacing: -.045em; line-height: 1.15; }
 .hero h1 span { color: var(--indigo); }
 .hero > div > p:last-child { color: var(--muted); margin: 11px 0 0; font-size: 14px; }
+.day-controls { display: grid; gap: 8px; flex: 0 0 auto; }
 .day-switcher { display: flex; align-items: center; background: white; border: 1px solid var(--line); padding: 8px; border-radius: 15px; box-shadow: 0 8px 24px rgba(31,43,79,.055); }
 .day-switcher button { width: 43px; height: 43px; border: 0; border-radius: 10px; background: #f1f3f9; color: var(--ink); font-size: 19px; }
 .day-switcher div { min-width: 142px; text-align: center; }
@@ -47,6 +48,10 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .day-switcher small { color: var(--muted); font-size: 10px; margin-bottom: 2px; }
 .day-switcher strong { font-size: 17px; }
 .day-switcher strong span { color: #929aaf; font-weight: 600; }
+.date-jump { display: grid; grid-template-columns: auto minmax(135px, 1fr) auto; align-items: center; gap: 8px; padding: 7px 8px 7px 12px; border: 1px solid var(--line); border-radius: 12px; background: white; }
+.date-jump label { color: var(--muted); font-size: 10px; font-weight: 750; }
+.date-jump input { min-width: 0; border: 0; outline: 0; color: var(--ink); font-size: 11px; background: transparent; }
+.date-jump button, .modal-date-row button { border: 0; border-radius: 8px; padding: 8px 10px; background: #eeefff; color: var(--indigo); font-size: 10px; font-weight: 850; }
 
 .dashboard-grid { display: grid; grid-template-columns: minmax(360px, 1.8fr) repeat(3, minmax(145px, .62fr)); gap: 15px; }
 .progress-card, .stat-card { background: white; border: 1px solid var(--line); border-radius: 16px; padding: 20px; box-shadow: 0 8px 28px rgba(31,43,79,.035); }
@@ -140,6 +145,8 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .modal > label small { color: var(--muted); font-weight: 500; }
 .modal input { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; outline: 0; }
 .modal input:focus { border-color: var(--indigo); box-shadow: 0 0 0 3px rgba(79,70,229,.08); }
+.modal-date-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.modal-date-row button { min-width: 58px; }
 .fixed-setting { display: grid; grid-template-columns: 1fr auto; gap: 5px 12px; align-items: center; background: #f4f3ff; border: 1px solid #e2e0ff; border-radius: 12px; padding: 14px; margin-bottom: 16px; }
 .fixed-setting span { font-size: 12px; font-weight: 750; }
 .fixed-setting strong { color: var(--indigo); font-size: 13px; }
@@ -179,8 +186,11 @@ button:disabled { cursor: not-allowed; opacity: .42; }
   .page { width: min(100% - 28px, 1400px); padding-top: 28px; }
   .hero { align-items: stretch; flex-direction: column; gap: 20px; }
   .hero h1 { font-size: 31px; }
+  .day-controls { width: 100%; }
   .day-switcher { align-self: stretch; justify-content: space-between; }
   .day-switcher div { flex: 1; }
+  .date-jump { grid-template-columns: 1fr auto; }
+  .date-jump label { grid-column: 1 / -1; }
   .dashboard-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .progress-card { padding: 16px; }
   .stat-card { padding: 10px 8px; display: block; text-align: center; }

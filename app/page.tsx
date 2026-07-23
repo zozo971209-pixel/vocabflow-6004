@@ -72,6 +72,31 @@ function formatDate(dateString: string, offset: number) {
   }).format(date);
 }
 
+function dateValueWithOffset(dateString: string, offset: number) {
+  const date = new Date(`${dateString}T12:00:00`);
+  date.setDate(date.getDate() + offset);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function currentLocalDate() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function dayNumberForDate(startDate: string, selectedDate: string) {
+  const [startYear, startMonth, startDay] = startDate.split("-").map(Number);
+  const [selectedYear, selectedMonth, selectedDay] = selectedDate.split("-").map(Number);
+  const startTime = Date.UTC(startYear, startMonth - 1, startDay);
+  const selectedTime = Date.UTC(selectedYear, selectedMonth - 1, selectedDay);
+  return Math.round((selectedTime - startTime) / 86_400_000) + 1;
+}
+
 export default function Home() {
   const importInputRef = useRef<HTMLInputElement>(null);
   const [words, setWords] = useState<Word[]>([]);
@@ -117,6 +142,8 @@ export default function Home() {
 
   const totalDays = Math.max(1, Math.ceil(words.length / WORDS_PER_DAY));
   const safeDay = Math.min(currentDay, totalDays);
+  const selectedLearningDate = dateValueWithOffset(startDate, safeDay - 1);
+  const planEndDate = dateValueWithOffset(startDate, totalDays - 1);
   const dayWords = useMemo(() => {
     const start = (safeDay - 1) * WORDS_PER_DAY;
     return words.slice(start, start + WORDS_PER_DAY);
@@ -151,6 +178,11 @@ export default function Home() {
   function changeDay(next: number) {
     setCurrentDay(Math.max(1, Math.min(totalDays, next)));
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function changeLearningDate(dateString: string) {
+    if (!dateString) return;
+    changeDay(dayNumberForDate(startDate, dateString));
   }
 
   function exportProgress() {
@@ -252,10 +284,24 @@ export default function Home() {
             <h1>今天，再前進 <span>{dayWords.length}</span> 個單字。</h1>
             <p>每天混合第 1–6 級與不同字首；完成標記會自動保存在這台裝置。</p>
           </div>
-          <div className="day-switcher" aria-label="切換學習天數">
-            <button onClick={() => changeDay(safeDay - 1)} disabled={safeDay <= 1} aria-label="前一天">←</button>
-            <div><small>目前進度</small><strong>Day {safeDay} <span>/ {totalDays}</span></strong></div>
-            <button onClick={() => changeDay(safeDay + 1)} disabled={safeDay >= totalDays} aria-label="後一天">→</button>
+          <div className="day-controls">
+            <div className="day-switcher" aria-label="切換學習天數">
+              <button onClick={() => changeDay(safeDay - 1)} disabled={safeDay <= 1} aria-label="前一天">←</button>
+              <div><small>目前進度</small><strong>Day {safeDay} <span>/ {totalDays}</span></strong></div>
+              <button onClick={() => changeDay(safeDay + 1)} disabled={safeDay >= totalDays} aria-label="後一天">→</button>
+            </div>
+            <div className="date-jump">
+              <label htmlFor="learning-date">直接選擇日期</label>
+              <input
+                id="learning-date"
+                type="date"
+                min={startDate}
+                max={planEndDate}
+                value={selectedLearningDate}
+                onChange={(event) => changeLearningDate(event.target.value)}
+              />
+              <button type="button" onClick={() => changeLearningDate(currentLocalDate())}>今天</button>
+            </div>
           </div>
         </section>
 
@@ -360,6 +406,13 @@ export default function Home() {
             <div className="fixed-setting"><span>每天單字數</span><strong>固定 50 詞</strong><small>因總數為 6,004，第 121 天是最後 4 詞。</small></div>
             <label><span>目前天數 <small>1–{totalDays}</small></span><input type="number" min="1" max={totalDays} value={safeDay} onChange={(e) => changeDay(Number(e.target.value))} /></label>
             <label><span>學習起始日</span><input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} /></label>
+            <label>
+              <span>目前學習日期 <small>可直接跳到指定日期</small></span>
+              <div className="modal-date-row">
+                <input type="date" min={startDate} max={planEndDate} value={selectedLearningDate} onChange={(e) => changeLearningDate(e.target.value)} />
+                <button type="button" onClick={() => changeLearningDate(currentLocalDate())}>今天</button>
+              </div>
+            </label>
             <div className="plan-summary"><strong>{words.length.toLocaleString()} 個詞條 · 每天 50 個</strong><span>共 {totalDays} 天完成</span></div>
             <section className="backup-panel" aria-labelledby="backup-title">
               <div><strong id="backup-title">進度備份與換機轉移</strong><p>舊手機先匯出，新手機再匯入；檔案包含單字標記與學習設定，不會上傳到伺服器。</p></div>
