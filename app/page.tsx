@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import QuizModal, { QuizHistoryEntry } from "./QuizModal";
 
 type Word = {
   id: number;
@@ -19,6 +20,7 @@ type BackupFeedback = { type: "success" | "error"; text: string } | null;
 
 const STORAGE_KEY = "vocab6004-progress-v1";
 const SETTINGS_KEY = "vocab6004-settings-v1";
+const QUIZ_HISTORY_KEY = "vocab6004-quiz-history-v1";
 const WORDS_PER_DAY = 50;
 const BASE_PATH = "/vocabflow-6004";
 const today = new Date().toISOString().slice(0, 10);
@@ -109,6 +111,8 @@ export default function Home() {
   const [levelFilter, setLevelFilter] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [quizOpen, setQuizOpen] = useState(false);
+  const [quizHistory, setQuizHistory] = useState<QuizHistoryEntry[]>([]);
   const [backupFeedback, setBackupFeedback] = useState<BackupFeedback>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -117,7 +121,8 @@ export default function Home() {
       fetch(`${BASE_PATH}/vocab.json`).then((res) => res.json()),
       Promise.resolve(localStorage.getItem(STORAGE_KEY)),
       Promise.resolve(localStorage.getItem(SETTINGS_KEY)),
-    ]).then(([data, savedStatuses, savedSettings]) => {
+      Promise.resolve(localStorage.getItem(QUIZ_HISTORY_KEY)),
+    ]).then(([data, savedStatuses, savedSettings, savedQuizHistory]) => {
       setWords(data as Word[]);
       if (savedStatuses) setStatuses(JSON.parse(savedStatuses));
       if (savedSettings) {
@@ -126,6 +131,7 @@ export default function Home() {
         setStartDate(settings.startDate ?? today);
         setSpeechSpeed(settings.speechSpeed ?? "slow");
       }
+      if (savedQuizHistory) setQuizHistory(JSON.parse(savedQuizHistory));
       setLoaded(true);
     }).catch(() => setLoaded(true));
   }, []);
@@ -139,6 +145,11 @@ export default function Home() {
     if (!loaded) return;
     localStorage.setItem(SETTINGS_KEY, JSON.stringify({ currentDay, startDate, speechSpeed }));
   }, [currentDay, startDate, speechSpeed, loaded]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    localStorage.setItem(QUIZ_HISTORY_KEY, JSON.stringify(quizHistory));
+  }, [quizHistory, loaded]);
 
   const totalDays = Math.max(1, Math.ceil(words.length / WORDS_PER_DAY));
   const safeDay = Math.min(currentDay, totalDays);
@@ -194,6 +205,7 @@ export default function Home() {
       progress: {
         statuses,
         settings: { currentDay: safeDay, startDate, speechSpeed },
+        quizHistory,
       },
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
@@ -248,9 +260,21 @@ export default function Home() {
       setCurrentDay(Math.max(1, Math.min(totalDays, Math.round(rawDay))));
       setStartDate(rawStartDate);
       setSpeechSpeed(rawSpeed);
+      if (Array.isArray(progress.quizHistory)) {
+        const nextHistory = progress.quizHistory.filter((entry): entry is QuizHistoryEntry => {
+          if (!entry || typeof entry !== "object") return false;
+          const item = entry as Record<string, unknown>;
+          return typeof item.id === "string" && typeof item.completedAt === "string" &&
+            typeof item.startDay === "number" && typeof item.endDay === "number" &&
+            typeof item.total === "number" && typeof item.correct === "number" &&
+            (item.directionMode === undefined || item.directionMode === "zh-to-en" || item.directionMode === "en-to-zh" || item.directionMode === "random") &&
+            Array.isArray(item.wrongWordIds) && item.wrongWordIds.every((id) => typeof id === "number" && validIds.has(id));
+        }).slice(0, 50);
+        setQuizHistory(nextHistory);
+      }
       setBackupFeedback({
         type: "success",
-        text: `匯入完成，已恢復 ${Object.keys(nextStatuses).length} 個單字標記與學習設定。`,
+        text: `匯入完成，已恢復 ${Object.keys(nextStatuses).length} 個單字標記、學習設定${Array.isArray(progress.quizHistory) ? "與測驗紀錄" : ""}。`,
       });
     } catch (error) {
       setBackupFeedback({
@@ -273,6 +297,7 @@ export default function Home() {
         </a>
         <div className="top-actions">
           <button className="quiet-button" onClick={() => setInfoOpen(true)}>資料說明</button>
+          <button className="quiz-launch-button" onClick={() => setQuizOpen(true)}>✦ 單字測驗</button>
           <button className="primary-button" onClick={() => setSettingsOpen(true)}>⚙ 學習設定</button>
         </div>
       </header>
@@ -415,7 +440,7 @@ export default function Home() {
             </label>
             <div className="plan-summary"><strong>{words.length.toLocaleString()} 個詞條 · 每天 50 個</strong><span>共 {totalDays} 天完成</span></div>
             <section className="backup-panel" aria-labelledby="backup-title">
-              <div><strong id="backup-title">進度備份與換機轉移</strong><p>舊手機先匯出，新手機再匯入；檔案包含單字標記與學習設定，不會上傳到伺服器。</p></div>
+              <div><strong id="backup-title">進度備份與換機轉移</strong><p>舊手機先匯出，新手機再匯入；檔案包含單字標記、學習設定與測驗紀錄，不會上傳到伺服器。</p></div>
               <div className="backup-actions">
                 <button type="button" className="backup-button export" onClick={exportProgress}>↓ 匯出進度</button>
                 <button type="button" className="backup-button import" onClick={() => importInputRef.current?.click()}>↑ 匯入進度</button>
@@ -439,6 +464,17 @@ export default function Home() {
             <a className="source-link" href="https://www.ceec.edu.tw/files/file_pool/1/0k213571061045122620/%E9%AB%98%E4%B8%AD%E8%8B%B1%E6%96%87%E5%8F%83%E8%80%83%E8%A9%9E%E5%BD%99%E8%A1%A8%28111%E5%AD%B8%E5%B9%B4%E5%BA%A6%E8%B5%B7%E9%81%A9%E7%94%A8%29.pdf" target="_blank" rel="noreferrer">查看大考中心原始詞彙表 ↗</a>
           </section>
         </div>
+      )}
+
+      {quizOpen && (
+        <QuizModal
+          words={words}
+          currentDay={safeDay}
+          totalDays={totalDays}
+          history={quizHistory}
+          onComplete={(entry) => setQuizHistory((current) => [entry, ...current].slice(0, 50))}
+          onClose={() => setQuizOpen(false)}
+        />
       )}
     </main>
   );
