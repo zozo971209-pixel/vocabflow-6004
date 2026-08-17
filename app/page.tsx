@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
-import QuizModal, { QuizHistoryEntry } from "./QuizModal";
+import QuizModal, { QuizHistoryEntry, QuizWordStatus } from "./QuizModal";
 
 type Word = {
   id: number;
@@ -13,7 +13,7 @@ type Word = {
   note: string;
 };
 
-type WordStatus = "known" | "review" | "unknown";
+type WordStatus = QuizWordStatus;
 type StatusMap = Record<number, WordStatus>;
 type SpeechSpeed = "slow" | "normal";
 type BackupFeedback = { type: "success" | "error"; text: string } | null;
@@ -268,6 +268,7 @@ export default function Home() {
             typeof item.startDay === "number" && typeof item.endDay === "number" &&
             typeof item.total === "number" && typeof item.correct === "number" &&
             (item.directionMode === undefined || item.directionMode === "zh-to-en" || item.directionMode === "en-to-zh" || item.directionMode === "random") &&
+            (item.statusFilters === undefined || (Array.isArray(item.statusFilters) && item.statusFilters.every((status) => status === "known" || status === "review" || status === "unknown"))) &&
             Array.isArray(item.wrongWordIds) && item.wrongWordIds.every((id) => typeof id === "number" && validIds.has(id));
         }).slice(0, 50);
         setQuizHistory(nextHistory);
@@ -471,6 +472,7 @@ export default function Home() {
           words={words}
           currentDay={safeDay}
           totalDays={totalDays}
+          statuses={statuses}
           history={quizHistory}
           onComplete={(entry) => setQuizHistory((current) => [entry, ...current].slice(0, 50))}
           onClose={() => setQuizOpen(false)}

@@ -10,6 +10,7 @@ export type QuizWord = {
 };
 
 export type QuizDirectionMode = "zh-to-en" | "en-to-zh" | "random";
+export type QuizWordStatus = "known" | "review" | "unknown";
 
 export type QuizHistoryEntry = {
   id: string;
@@ -20,6 +21,7 @@ export type QuizHistoryEntry = {
   correct: number;
   wrongWordIds: number[];
   directionMode?: QuizDirectionMode;
+  statusFilters?: QuizWordStatus[];
 };
 
 type QuizQuestion = {
@@ -34,6 +36,7 @@ type Props = {
   words: QuizWord[];
   currentDay: number;
   totalDays: number;
+  statuses: Record<number, QuizWordStatus>;
   history: QuizHistoryEntry[];
   onComplete: (entry: QuizHistoryEntry) => void;
   onClose: () => void;
@@ -44,6 +47,11 @@ const directionModeLabels: Record<QuizDirectionMode, string> = {
   "zh-to-en": "中選英",
   "en-to-zh": "英選中",
   random: "隨機",
+};
+const statusLabels: Record<QuizWordStatus, string> = {
+  known: "已熟悉",
+  review: "待複習",
+  unknown: "不熟",
 };
 
 function shuffle<T>(items: T[]) {
@@ -127,9 +135,10 @@ function formatHistoryDate(value: string) {
   }).format(new Date(value));
 }
 
-export default function QuizModal({ words, currentDay, totalDays, history, onComplete, onClose }: Props) {
+export default function QuizModal({ words, currentDay, totalDays, statuses, history, onComplete, onClose }: Props) {
   const [rangeMode, setRangeMode] = useState<"today" | "custom">("today");
   const [directionMode, setDirectionMode] = useState<QuizDirectionMode>("random");
+  const [statusFilters, setStatusFilters] = useState<QuizWordStatus[]>([]);
   const [startDay, setStartDay] = useState(currentDay);
   const [endDay, setEndDay] = useState(currentDay);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
@@ -143,8 +152,11 @@ export default function QuizModal({ words, currentDay, totalDays, history, onCom
   const effectiveEnd = rangeMode === "today" ? currentDay : Math.max(startDay, endDay);
   const scope = useMemo(() => {
     const start = (effectiveStart - 1) * WORDS_PER_DAY;
-    return words.slice(start, effectiveEnd * WORDS_PER_DAY);
-  }, [effectiveStart, effectiveEnd, words]);
+    const rangeWords = words.slice(start, effectiveEnd * WORDS_PER_DAY);
+    return statusFilters.length
+      ? rangeWords.filter((word) => statusFilters.includes(statuses[word.id]))
+      : rangeWords;
+  }, [effectiveStart, effectiveEnd, statusFilters, statuses, words]);
   const current = questions[questionIndex];
 
   function startQuiz() {
@@ -183,6 +195,7 @@ export default function QuizModal({ words, currentDay, totalDays, history, onCom
       correct: correctCount,
       wrongWordIds,
       directionMode,
+      statusFilters,
     };
     onComplete(entry);
     setFinished(true);
@@ -195,6 +208,12 @@ export default function QuizModal({ words, currentDay, totalDays, history, onCom
     setCorrectCount(0);
     setWrongWordIds([]);
     setFinished(false);
+  }
+
+  function toggleStatus(status: QuizWordStatus) {
+    setStatusFilters((current) => current.includes(status)
+      ? current.filter((value) => value !== status)
+      : [...current, status]);
   }
 
   const wrongWords = finished
@@ -220,6 +239,22 @@ export default function QuizModal({ words, currentDay, totalDays, history, onCom
                 <label><span>到第幾天</span><input type="number" min="1" max={totalDays} value={endDay} onChange={(event) => setEndDay(Math.max(1, Math.min(totalDays, Number(event.target.value))))} /></label>
               </div>
             )}
+            <div className="quiz-status-picker">
+              <span>熟悉度（可複選）</span>
+              <div className="quiz-status-options" role="group" aria-label="依熟悉度篩選測驗單字">
+                {(["known", "review", "unknown"] as QuizWordStatus[]).map((status) => (
+                  <button
+                    key={status}
+                    className={`${statusFilters.includes(status) ? "active" : ""} ${status}`}
+                    aria-pressed={statusFilters.includes(status)}
+                    onClick={() => toggleStatus(status)}
+                  >
+                    <span>{statusFilters.includes(status) ? "✓" : ""}</span>{statusLabels[status]}
+                  </button>
+                ))}
+              </div>
+              <small>{statusFilters.length ? `只測：${statusFilters.map((status) => statusLabels[status]).join("＋")}` : "未選狀態：包含此天數範圍內全部單字"}</small>
+            </div>
             <div className="quiz-direction-picker">
               <span>出題方式</span>
               <div className="quiz-direction-options" role="group" aria-label="選擇出題方式">
@@ -240,7 +275,7 @@ export default function QuizModal({ words, currentDay, totalDays, history, onCom
               <h3>最近測驗</h3>
               {history.slice(0, 5).map((entry) => (
                 <div key={entry.id}>
-                  <span>{formatHistoryDate(entry.completedAt)} · Day {entry.startDay}{entry.endDay !== entry.startDay ? `–${entry.endDay}` : ""}{entry.directionMode ? ` · ${directionModeLabels[entry.directionMode]}` : ""}</span>
+                  <span>{formatHistoryDate(entry.completedAt)} · Day {entry.startDay}{entry.endDay !== entry.startDay ? `–${entry.endDay}` : ""}{entry.directionMode ? ` · ${directionModeLabels[entry.directionMode]}` : ""}{entry.statusFilters?.length ? ` · ${entry.statusFilters.map((status) => statusLabels[status]).join("＋")}` : ""}</span>
                   <strong>{entry.correct} / {entry.total}</strong>
                 </div>
               ))}
