@@ -397,7 +397,6 @@ export default function Home() {
           <span><strong>詞序 VocabFlow</strong><small>高中英文每日學習</small></span>
         </a>
         <div className="top-actions">
-          <button className="quiet-button" onClick={() => setInfoOpen(true)}>資料說明</button>
           <button className="quiz-launch-button" onClick={() => setQuizOpen(true)}>✦ 單字測驗</button>
           <button className="primary-button" onClick={() => setSettingsOpen(true)}>⚙ 學習設定</button>
         </div>
