@@ -1,0 +1,15 @@
+{
+  "name": "詞序 VocabFlow｜高中英文每日學習",
+  "short_name": "詞序",
+  "description": "每天學習台灣高中英文參考詞彙，支援離線、測驗與本機進度保存。",
+  "start_url": "/vocabflow-6004/",
+  "scope": "/vocabflow-6004/",
+  "display": "standalone",
+  "background_color": "#f4f6fb",
+  "theme_color": "#4f46e5",
+  "lang": "zh-Hant",
+  "icons": [
+    { "src": "/vocabflow-6004/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/vocabflow-6004/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

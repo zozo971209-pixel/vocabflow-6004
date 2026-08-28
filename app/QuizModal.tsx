@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 export type QuizWord = {
   id: number;
@@ -22,6 +22,7 @@ export type QuizHistoryEntry = {
   wrongWordIds: number[];
   directionMode?: QuizDirectionMode;
   statusFilters?: QuizWordStatus[];
+  timerSeconds?: number;
 };
 
 type QuizQuestion = {
@@ -43,6 +44,7 @@ type Props = {
 };
 
 const WORDS_PER_DAY = 50;
+const TIMEOUT_VALUE = "__timeout__";
 const directionModeLabels: Record<QuizDirectionMode, string> = {
   "zh-to-en": "中選英",
   "en-to-zh": "英選中",
@@ -147,6 +149,9 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
   const [correctCount, setCorrectCount] = useState(0);
   const [wrongWordIds, setWrongWordIds] = useState<number[]>([]);
   const [finished, setFinished] = useState(false);
+  const [timerEnabled, setTimerEnabled] = useState(false);
+  const [timerSeconds, setTimerSeconds] = useState(30);
+  const [remainingSeconds, setRemainingSeconds] = useState(30);
 
   const effectiveStart = rangeMode === "today" ? currentDay : Math.min(startDay, endDay);
   const effectiveEnd = rangeMode === "today" ? currentDay : Math.max(startDay, endDay);
@@ -159,6 +164,20 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
   }, [effectiveStart, effectiveEnd, statusFilters, statuses, words]);
   const current = questions[questionIndex];
 
+  useEffect(() => {
+    if (!current || !timerEnabled || selected || finished) return;
+    const timer = window.setTimeout(() => {
+      if (remainingSeconds <= 1) {
+        setRemainingSeconds(0);
+        setSelected(TIMEOUT_VALUE);
+        setWrongWordIds((ids) => ids.includes(current.word.id) ? ids : [...ids, current.word.id]);
+      } else {
+        setRemainingSeconds((value) => value - 1);
+      }
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [current, timerEnabled, selected, finished, remainingSeconds]);
+
   function startQuiz() {
     const nextQuestions = makeQuestions(scope, words, directionMode);
     setQuestions(nextQuestions);
@@ -167,6 +186,7 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
     setCorrectCount(0);
     setWrongWordIds([]);
     setFinished(false);
+    setRemainingSeconds(timerSeconds);
   }
 
   function answer(option: string) {
@@ -183,6 +203,7 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
     if (questionIndex + 1 < questions.length) {
       setQuestionIndex((index) => index + 1);
       setSelected(null);
+      setRemainingSeconds(timerSeconds);
       return;
     }
 
@@ -196,6 +217,7 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
       wrongWordIds,
       directionMode,
       statusFilters,
+      timerSeconds: timerEnabled ? timerSeconds : undefined,
     };
     onComplete(entry);
     setFinished(true);
@@ -265,9 +287,19 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
                 ))}
               </div>
             </div>
+            <div className="quiz-timer-picker">
+              <label>
+                <input type="checkbox" checked={timerEnabled} onChange={(event) => setTimerEnabled(event.target.checked)} />
+                <span>啟用每題計時</span>
+              </label>
+              {timerEnabled && (
+                <label><span>每題</span><input type="number" min="5" max="300" value={timerSeconds} onChange={(event) => setTimerSeconds(Math.max(5, Math.min(300, Number(event.target.value) || 5)))} /><span>秒</span></label>
+              )}
+              <small>時間到會顯示正確答案，由你按「下一題」。</small>
+            </div>
             <div className="quiz-summary">
               <strong>Day {effectiveStart}{effectiveEnd !== effectiveStart ? `–${effectiveEnd}` : ""}</strong>
-              <span>{scope.length} 題 · {directionModeLabels[directionMode]}四選一</span>
+              <span>{scope.length} 題 · {directionModeLabels[directionMode]}四選一{timerEnabled ? ` · 每題 ${timerSeconds} 秒` : ""}</span>
             </div>
             <button className="primary-button full" onClick={startQuiz} disabled={!scope.length}>開始測驗</button>
 
@@ -275,7 +307,7 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
               <h3>最近測驗</h3>
               {history.slice(0, 5).map((entry) => (
                 <div key={entry.id}>
-                  <span>{formatHistoryDate(entry.completedAt)} · Day {entry.startDay}{entry.endDay !== entry.startDay ? `–${entry.endDay}` : ""}{entry.directionMode ? ` · ${directionModeLabels[entry.directionMode]}` : ""}{entry.statusFilters?.length ? ` · ${entry.statusFilters.map((status) => statusLabels[status]).join("＋")}` : ""}</span>
+                  <span>{formatHistoryDate(entry.completedAt)} · Day {entry.startDay}{entry.endDay !== entry.startDay ? `–${entry.endDay}` : ""}{entry.directionMode ? ` · ${directionModeLabels[entry.directionMode]}` : ""}{entry.statusFilters?.length ? ` · ${entry.statusFilters.map((status) => statusLabels[status]).join("＋")}` : ""}{entry.timerSeconds ? ` · ${entry.timerSeconds} 秒` : ""}</span>
                   <strong>{entry.correct} / {entry.total}</strong>
                 </div>
               ))}
@@ -288,7 +320,7 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
           <>
             <div className="quiz-progress-line">
               <span>第 {questionIndex + 1} / {questions.length} 題</span>
-              <strong>{Math.round(((questionIndex + 1) / questions.length) * 100)}%</strong>
+              <strong>{timerEnabled && <b className={`quiz-timer-clock ${remainingSeconds <= 5 ? "urgent" : ""}`}>⏱ {remainingSeconds} 秒</b>}{Math.round(((questionIndex + 1) / questions.length) * 100)}%</strong>
             </div>
             <div className="quiz-progress-track"><i style={{ width: `${((questionIndex + 1) / questions.length) * 100}%` }} /></div>
             <p className="quiz-direction">{current.direction === "en-to-zh" ? "選出最合適的中文意思" : "選出對應的英文單字"}</p>
@@ -306,7 +338,7 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
             </div>
             {selected && (
               <div className={`quiz-feedback ${selected === current.answer ? "correct" : "wrong"}`}>
-                <strong>{selected === current.answer ? "答對了" : "答錯了"}</strong>
+                <strong>{selected === current.answer ? "答對了" : selected === TIMEOUT_VALUE ? "時間到" : "答錯了"}</strong>
                 {selected !== current.answer && <span>正確答案：{current.answer}</span>}
               </div>
             )}

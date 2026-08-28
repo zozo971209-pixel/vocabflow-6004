@@ -2,6 +2,10 @@
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import QuizModal, { QuizHistoryEntry, QuizWordStatus } from "./QuizModal";
+import WordDetails from "./WordDetails";
+import { isVerifiedEnrichmentRecord, VerifiedEnrichmentRecord } from "./enrichment";
+import { AiEnrichmentPayload, AiEnrichmentWord, isAiEnrichmentPayload } from "./aiEnrichment";
+import { buildWordFamilyMap } from "./wordEnhancements";
 
 type Word = {
   id: number;
@@ -16,11 +20,19 @@ type Word = {
 type WordStatus = QuizWordStatus;
 type StatusMap = Record<number, WordStatus>;
 type SpeechSpeed = "slow" | "normal";
+type ThemeMode = "light" | "dark";
+type FontSizeMode = "small" | "normal" | "large";
 type BackupFeedback = { type: "success" | "error"; text: string } | null;
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+}
 
 const STORAGE_KEY = "vocab6004-progress-v1";
 const SETTINGS_KEY = "vocab6004-settings-v1";
 const QUIZ_HISTORY_KEY = "vocab6004-quiz-history-v1";
+const NOTES_KEY = "vocab6004-notes-v1";
 const WORDS_PER_DAY = 50;
 const BASE_PATH = "/vocabflow-6004";
 const today = new Date().toISOString().slice(0, 10);
@@ -35,16 +47,18 @@ function cleanSpeechText(text: string, lang: "en-US" | "zh-TW") {
   if (lang === "en-US") {
     if (text.trim().toLowerCase() === "a/an") return "a book. an apple.";
     return text
-      .replace(/\//g, " or ")
+      .replace(/\([^)]*\)|\[[^\]]*\]|\{[^}]*\}/g, " ")
+      .replace(/\b(?:vt|vi|v|n|a|ad|adj|adv|prep|pron|conj|art|num)\.\s*/gi, " ")
+      .replace(/[\/\\|]+/g, ", ")
       .replace(/&/g, " and ")
-      .replace(/[()[\]{}*_~|\\]/g, " ")
+      .replace(/[*_~]/g, " ")
       .replace(/\s+/g, " ")
       .trim();
   }
 
   return text
-    .replace(/\[[^\]]+\]/g, "")
-    .replace(/^\s*(?:vt|vi|v|n|a|ad|adj|adv|prep|pron|conj|art|num)\.\s*/gim, "")
+    .replace(/\([^)]*\)|\[[^\]]*\]|\{[^}]*\}/g, " ")
+    .replace(/\b(?:vt|vi|v|n|a|ad|adj|adv|prep|pron|conj|art|num)\.\s*/gim, " ")
     .replace(/[\/\\|*_~]/g, "，")
     .replace(/\s+/g, " ")
     .trim();
@@ -56,8 +70,8 @@ function speak(text: string, lang: "en-US" | "zh-TW", speed: SpeechSpeed) {
   const utterance = new SpeechSynthesisUtterance(cleanSpeechText(text, lang));
   utterance.lang = lang;
   utterance.rate = speed === "slow"
-    ? (lang === "en-US" ? 0.68 : 0.78)
-    : (lang === "en-US" ? 0.82 : 0.92);
+    ? (lang === "en-US" ? 0.52 : 0.58)
+    : (lang === "en-US" ? 0.96 : 1);
   const voices = window.speechSynthesis.getVoices();
   utterance.voice = voices.find((voice) => voice.lang === lang) ??
     voices.find((voice) => voice.lang.startsWith(lang.slice(0, 2))) ?? null;
@@ -106,6 +120,14 @@ export default function Home() {
   const [currentDay, setCurrentDay] = useState(1);
   const [startDate, setStartDate] = useState(today);
   const [speechSpeed, setSpeechSpeed] = useState<SpeechSpeed>("slow");
+  const [theme, setTheme] = useState<ThemeMode>("light");
+  const [fontSize, setFontSize] = useState<FontSizeMode>("normal");
+  const [wordNotes, setWordNotes] = useState<Record<number, string>>({});
+  const [enrichmentRecords, setEnrichmentRecords] = useState<VerifiedEnrichmentRecord[]>([]);
+  const [aiEnrichment, setAiEnrichment] = useState<Record<string, AiEnrichmentWord>>({});
+  const [aiEnrichmentMeta, setAiEnrichmentMeta] = useState<Pick<AiEnrichmentPayload, "notice" | "source"> | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [pwaFeedback, setPwaFeedback] = useState("");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | WordStatus | "unmarked">("all");
   const [levelFilter, setLevelFilter] = useState(0);
@@ -119,19 +141,33 @@ export default function Home() {
   useEffect(() => {
     Promise.all([
       fetch(`${BASE_PATH}/vocab.json`).then((res) => res.json()),
+      fetch(`${BASE_PATH}/enrichment.json`).then((res) => res.json()),
+      fetch(`${BASE_PATH}/enrichment-ai.json`).then((res) => res.json()),
       Promise.resolve(localStorage.getItem(STORAGE_KEY)),
       Promise.resolve(localStorage.getItem(SETTINGS_KEY)),
       Promise.resolve(localStorage.getItem(QUIZ_HISTORY_KEY)),
-    ]).then(([data, savedStatuses, savedSettings, savedQuizHistory]) => {
+      Promise.resolve(localStorage.getItem(NOTES_KEY)),
+    ]).then(([data, enrichment, aiData, savedStatuses, savedSettings, savedQuizHistory, savedNotes]) => {
       setWords(data as Word[]);
+      if (enrichment && typeof enrichment === "object" && (enrichment as { schemaVersion?: unknown }).schemaVersion === 1) {
+        const candidateRecords = (enrichment as { records?: unknown }).records;
+        if (Array.isArray(candidateRecords)) setEnrichmentRecords(candidateRecords.filter(isVerifiedEnrichmentRecord));
+      }
+      if (isAiEnrichmentPayload(aiData)) {
+        setAiEnrichment(aiData.words);
+        setAiEnrichmentMeta({ notice: aiData.notice, source: aiData.source });
+      }
       if (savedStatuses) setStatuses(JSON.parse(savedStatuses));
       if (savedSettings) {
         const settings = JSON.parse(savedSettings);
         setCurrentDay(settings.currentDay ?? 1);
         setStartDate(settings.startDate ?? today);
         setSpeechSpeed(settings.speechSpeed ?? "slow");
+        setTheme(settings.theme === "dark" ? "dark" : "light");
+        setFontSize(["small", "normal", "large"].includes(settings.fontSize) ? settings.fontSize : "normal");
       }
       if (savedQuizHistory) setQuizHistory(JSON.parse(savedQuizHistory));
+      if (savedNotes) setWordNotes(JSON.parse(savedNotes));
       setLoaded(true);
     }).catch(() => setLoaded(true));
   }, []);
@@ -143,15 +179,45 @@ export default function Home() {
 
   useEffect(() => {
     if (!loaded) return;
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ currentDay, startDate, speechSpeed }));
-  }, [currentDay, startDate, speechSpeed, loaded]);
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ currentDay, startDate, speechSpeed, theme, fontSize }));
+  }, [currentDay, startDate, speechSpeed, theme, fontSize, loaded]);
 
   useEffect(() => {
     if (!loaded) return;
     localStorage.setItem(QUIZ_HISTORY_KEY, JSON.stringify(quizHistory));
   }, [quizHistory, loaded]);
 
+  useEffect(() => {
+    if (!loaded) return;
+    localStorage.setItem(NOTES_KEY, JSON.stringify(wordNotes));
+  }, [wordNotes, loaded]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.dataset.fontSize = fontSize;
+  }, [theme, fontSize]);
+
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register(`${BASE_PATH}/sw.js`, { scope: `${BASE_PATH}/` }).catch(() => {
+        setPwaFeedback("離線功能註冊失敗，請重新整理後再試。");
+      });
+    }
+    const handleInstall = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    };
+    window.addEventListener("beforeinstallprompt", handleInstall);
+    return () => window.removeEventListener("beforeinstallprompt", handleInstall);
+  }, []);
+
   const totalDays = Math.max(1, Math.ceil(words.length / WORDS_PER_DAY));
+  const familyMap = useMemo(() => buildWordFamilyMap(words), [words]);
+  const enrichmentMap = useMemo(() => {
+    const map = new Map<number, VerifiedEnrichmentRecord[]>();
+    enrichmentRecords.forEach((record) => map.set(record.wordId, [...(map.get(record.wordId) ?? []), record]));
+    return map;
+  }, [enrichmentRecords]);
   const safeDay = Math.min(currentDay, totalDays);
   const selectedLearningDate = dateValueWithOffset(startDate, safeDay - 1);
   const planEndDate = dateValueWithOffset(startDate, totalDays - 1);
@@ -196,6 +262,26 @@ export default function Home() {
     changeDay(dayNumberForDate(startDate, dateString));
   }
 
+  function updateWordNote(id: number, note: string) {
+    setWordNotes((current) => {
+      const next = { ...current };
+      if (note) next[id] = note;
+      else delete next[id];
+      return next;
+    });
+  }
+
+  async function installPwa() {
+    if (!installPrompt) {
+      setPwaFeedback("若沒有安裝按鈕，請用瀏覽器選單的「安裝應用程式」或「加到主畫面」。");
+      return;
+    }
+    await installPrompt.prompt();
+    const choice = await installPrompt.userChoice;
+    setPwaFeedback(choice.outcome === "accepted" ? "已接受安裝。" : "已取消安裝，可稍後再試。");
+    setInstallPrompt(null);
+  }
+
   function exportProgress() {
     const backup = {
       format: "vocabflow-progress",
@@ -204,8 +290,9 @@ export default function Home() {
       app: "詞序 VocabFlow",
       progress: {
         statuses,
-        settings: { currentDay: safeDay, startDate, speechSpeed },
+        settings: { currentDay: safeDay, startDate, speechSpeed, theme, fontSize },
         quizHistory,
+        notes: wordNotes,
       },
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
@@ -250,6 +337,8 @@ export default function Home() {
       const rawDay = importedSettings.currentDay;
       const rawStartDate = importedSettings.startDate;
       const rawSpeed = importedSettings.speechSpeed;
+      const rawTheme = importedSettings.theme;
+      const rawFontSize = importedSettings.fontSize;
       if (typeof rawDay !== "number" || !Number.isFinite(rawDay) ||
           typeof rawStartDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(rawStartDate) ||
           (rawSpeed !== "slow" && rawSpeed !== "normal")) {
@@ -260,6 +349,16 @@ export default function Home() {
       setCurrentDay(Math.max(1, Math.min(totalDays, Math.round(rawDay))));
       setStartDate(rawStartDate);
       setSpeechSpeed(rawSpeed);
+      if (rawTheme === "light" || rawTheme === "dark") setTheme(rawTheme);
+      if (rawFontSize === "small" || rawFontSize === "normal" || rawFontSize === "large") setFontSize(rawFontSize);
+      if (progress.notes && typeof progress.notes === "object" && !Array.isArray(progress.notes)) {
+        const nextNotes: Record<number, string> = {};
+        for (const [rawId, value] of Object.entries(progress.notes as Record<string, unknown>)) {
+          const id = Number(rawId);
+          if (validIds.has(id) && typeof value === "string" && value.length <= 500) nextNotes[id] = value;
+        }
+        setWordNotes(nextNotes);
+      }
       if (Array.isArray(progress.quizHistory)) {
         const nextHistory = progress.quizHistory.filter((entry): entry is QuizHistoryEntry => {
           if (!entry || typeof entry !== "object") return false;
@@ -269,13 +368,14 @@ export default function Home() {
             typeof item.total === "number" && typeof item.correct === "number" &&
             (item.directionMode === undefined || item.directionMode === "zh-to-en" || item.directionMode === "en-to-zh" || item.directionMode === "random") &&
             (item.statusFilters === undefined || (Array.isArray(item.statusFilters) && item.statusFilters.every((status) => status === "known" || status === "review" || status === "unknown"))) &&
-            Array.isArray(item.wrongWordIds) && item.wrongWordIds.every((id) => typeof id === "number" && validIds.has(id));
+            Array.isArray(item.wrongWordIds) && item.wrongWordIds.every((id) => typeof id === "number" && validIds.has(id)) &&
+            (item.timerSeconds === undefined || (typeof item.timerSeconds === "number" && item.timerSeconds >= 5 && item.timerSeconds <= 300));
         }).slice(0, 50);
         setQuizHistory(nextHistory);
       }
       setBackupFeedback({
         type: "success",
-        text: `匯入完成，已恢復 ${Object.keys(nextStatuses).length} 個單字標記、學習設定${Array.isArray(progress.quizHistory) ? "與測驗紀錄" : ""}。`,
+        text: `匯入完成，已恢復 ${Object.keys(nextStatuses).length} 個單字標記、學習設定、個人筆記${Array.isArray(progress.quizHistory) ? "與測驗紀錄" : ""}。`,
       });
     } catch (error) {
       setBackupFeedback({
@@ -398,6 +498,16 @@ export default function Home() {
                     </button>
                   ))}
                 </div>
+                <WordDetails
+                  wordId={word.id}
+                  word={word.word}
+                  family={familyMap.get(word.id) ?? []}
+                  records={enrichmentMap.get(word.id) ?? []}
+                  aiData={aiEnrichment[String(word.id)]}
+                  aiMeta={aiEnrichmentMeta}
+                  personalNote={wordNotes[word.id] ?? ""}
+                  onNoteChange={updateWordNote}
+                />
               </article>
             );
           })}
@@ -440,8 +550,29 @@ export default function Home() {
               </div>
             </label>
             <div className="plan-summary"><strong>{words.length.toLocaleString()} 個詞條 · 每天 50 個</strong><span>共 {totalDays} 天完成</span></div>
+            <section className="setting-section" aria-labelledby="appearance-title">
+              <div><strong id="appearance-title">外觀與閱讀</strong><p>設定只儲存在這台裝置。</p></div>
+              <span className="setting-label">顯示主題</span>
+              <div className="segmented-control" role="group" aria-label="顯示主題">
+                <button className={theme === "light" ? "active" : ""} onClick={() => setTheme("light")}>亮色</button>
+                <button className={theme === "dark" ? "active" : ""} onClick={() => setTheme("dark")}>深色</button>
+              </div>
+              <span className="setting-label">字體大小</span>
+              <div className="segmented-control three" role="group" aria-label="字體大小">
+                {(["small", "normal", "large"] as FontSizeMode[]).map((size) => (
+                  <button key={size} className={fontSize === size ? "active" : ""} onClick={() => setFontSize(size)}>
+                    {{ small: "小", normal: "標準", large: "大" }[size]}
+                  </button>
+                ))}
+              </div>
+            </section>
+            <section className="setting-section pwa-panel" aria-labelledby="pwa-title">
+              <div><strong id="pwa-title">安裝與完整離線使用</strong><p>先在線上開啟一次，網站與 6,004 詞資料會快取至裝置；之後無網路仍可學習、測驗與寫筆記。</p></div>
+              <button type="button" className="backup-button export" onClick={installPwa}>＋ 安裝到裝置</button>
+              {pwaFeedback && <p className="backup-feedback" role="status">{pwaFeedback}</p>}
+            </section>
             <section className="backup-panel" aria-labelledby="backup-title">
-              <div><strong id="backup-title">進度備份與換機轉移</strong><p>舊手機先匯出，新手機再匯入；檔案包含單字標記、學習設定與測驗紀錄，不會上傳到伺服器。</p></div>
+              <div><strong id="backup-title">進度備份與換機轉移</strong><p>舊手機先匯出，新手機再匯入；檔案包含單字標記、學習設定、個人筆記與測驗紀錄，不會上傳到伺服器。</p></div>
               <div className="backup-actions">
                 <button type="button" className="backup-button export" onClick={exportProgress}>↓ 匯出進度</button>
                 <button type="button" className="backup-button import" onClick={() => importInputRef.current?.click()}>↑ 匯入進度</button>
