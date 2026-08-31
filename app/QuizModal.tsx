@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { isFillAnswerCorrect } from "./quizAnswers";
 
 export type QuizWord = {
   id: number;
@@ -10,6 +11,7 @@ export type QuizWord = {
 };
 
 export type QuizDirectionMode = "zh-to-en" | "en-to-zh" | "random";
+export type QuizQuestionType = "choice" | "fill";
 export type QuizWordStatus = "known" | "review" | "unknown";
 
 export type QuizHistoryEntry = {
@@ -20,6 +22,7 @@ export type QuizHistoryEntry = {
   total: number;
   correct: number;
   wrongWordIds: number[];
+  questionType?: QuizQuestionType;
   directionMode?: QuizDirectionMode;
   statusFilters?: QuizWordStatus[];
   timerSeconds?: number;
@@ -49,6 +52,10 @@ const directionModeLabels: Record<QuizDirectionMode, string> = {
   "zh-to-en": "中選英",
   "en-to-zh": "英選中",
   random: "隨機",
+};
+const questionTypeLabels: Record<QuizQuestionType, string> = {
+  choice: "選擇題",
+  fill: "填充題",
 };
 const statusLabels: Record<QuizWordStatus, string> = {
   known: "已熟悉",
@@ -113,9 +120,11 @@ function makeOptions(target: QuizWord, direction: QuizQuestion["direction"], poo
   return shuffle(options);
 }
 
-function makeQuestions(scope: QuizWord[], allWords: QuizWord[], mode: QuizDirectionMode) {
+function makeQuestions(scope: QuizWord[], allWords: QuizWord[], mode: QuizDirectionMode, questionType: QuizQuestionType) {
   return shuffle(scope).map((word) => {
-    const direction: QuizQuestion["direction"] = mode === "random"
+    const direction: QuizQuestion["direction"] = questionType === "fill"
+      ? "zh-to-en"
+      : mode === "random"
       ? (Math.random() < 0.5 ? "en-to-zh" : "zh-to-en")
       : mode;
     return {
@@ -123,7 +132,7 @@ function makeQuestions(scope: QuizWord[], allWords: QuizWord[], mode: QuizDirect
       direction,
       prompt: direction === "en-to-zh" ? word.word : compactMeaning(word.meaning),
       answer: direction === "en-to-zh" ? compactMeaning(word.meaning) : word.word,
-      options: makeOptions(word, direction, allWords),
+      options: questionType === "choice" ? makeOptions(word, direction, allWords) : [],
     };
   });
 }
@@ -139,6 +148,7 @@ function formatHistoryDate(value: string) {
 
 export default function QuizModal({ words, currentDay, totalDays, statuses, history, onComplete, onClose }: Props) {
   const [rangeMode, setRangeMode] = useState<"today" | "custom">("today");
+  const [questionType, setQuestionType] = useState<QuizQuestionType>("choice");
   const [directionMode, setDirectionMode] = useState<QuizDirectionMode>("random");
   const [statusFilters, setStatusFilters] = useState<QuizWordStatus[]>([]);
   const [startDay, setStartDay] = useState(currentDay);
@@ -146,6 +156,7 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
+  const [fillAnswer, setFillAnswer] = useState("");
   const [correctCount, setCorrectCount] = useState(0);
   const [wrongWordIds, setWrongWordIds] = useState<number[]>([]);
   const [finished, setFinished] = useState(false);
@@ -163,6 +174,9 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
       : rangeWords;
   }, [effectiveStart, effectiveEnd, statusFilters, statuses, words]);
   const current = questions[questionIndex];
+  const currentAnswerCorrect = Boolean(current && selected && selected !== TIMEOUT_VALUE && (
+    questionType === "fill" ? isFillAnswerCorrect(selected, current.word.word) : selected === current.answer
+  ));
 
   useEffect(() => {
     if (!current || !timerEnabled || selected || finished) return;
@@ -179,10 +193,11 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
   }, [current, timerEnabled, selected, finished, remainingSeconds]);
 
   function startQuiz() {
-    const nextQuestions = makeQuestions(scope, words, directionMode);
+    const nextQuestions = makeQuestions(scope, words, directionMode, questionType);
     setQuestions(nextQuestions);
     setQuestionIndex(0);
     setSelected(null);
+    setFillAnswer("");
     setCorrectCount(0);
     setWrongWordIds([]);
     setFinished(false);
@@ -199,10 +214,22 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
     }
   }
 
+  function submitFillAnswer() {
+    if (selected || !current || !fillAnswer.trim()) return;
+    const submitted = fillAnswer.trim();
+    setSelected(submitted);
+    if (isFillAnswerCorrect(submitted, current.word.word)) {
+      setCorrectCount((count) => count + 1);
+    } else {
+      setWrongWordIds((ids) => [...ids, current.word.id]);
+    }
+  }
+
   function nextQuestion() {
     if (questionIndex + 1 < questions.length) {
       setQuestionIndex((index) => index + 1);
       setSelected(null);
+      setFillAnswer("");
       setRemainingSeconds(timerSeconds);
       return;
     }
@@ -215,6 +242,7 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
       total: questions.length,
       correct: correctCount,
       wrongWordIds,
+      questionType,
       directionMode,
       statusFilters,
       timerSeconds: timerEnabled ? timerSeconds : undefined,
@@ -227,6 +255,7 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
     setQuestions([]);
     setQuestionIndex(0);
     setSelected(null);
+    setFillAnswer("");
     setCorrectCount(0);
     setWrongWordIds([]);
     setFinished(false);
@@ -277,16 +306,28 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
               </div>
               <small>{statusFilters.length ? `只測：${statusFilters.map((status) => statusLabels[status]).join("＋")}` : "未選狀態：包含此天數範圍內全部單字"}</small>
             </div>
-            <div className="quiz-direction-picker">
-              <span>出題方式</span>
-              <div className="quiz-direction-options" role="group" aria-label="選擇出題方式">
-                {(["zh-to-en", "en-to-zh", "random"] as QuizDirectionMode[]).map((mode) => (
-                  <button key={mode} className={directionMode === mode ? "active" : ""} onClick={() => setDirectionMode(mode)}>
-                    {directionModeLabels[mode]}
+            <div className="quiz-question-type-picker">
+              <span>題型</span>
+              <div className="quiz-question-type-options" role="group" aria-label="選擇測驗題型">
+                {(["choice", "fill"] as QuizQuestionType[]).map((type) => (
+                  <button key={type} className={questionType === type ? "active" : ""} onClick={() => setQuestionType(type)}>
+                    {questionTypeLabels[type]}
                   </button>
                 ))}
               </div>
             </div>
+            {questionType === "choice" ? (
+              <div className="quiz-direction-picker">
+                <span>出題方式</span>
+                <div className="quiz-direction-options" role="group" aria-label="選擇出題方式">
+                  {(["zh-to-en", "en-to-zh", "random"] as QuizDirectionMode[]).map((mode) => (
+                    <button key={mode} className={directionMode === mode ? "active" : ""} onClick={() => setDirectionMode(mode)}>
+                      {directionModeLabels[mode]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : <p className="quiz-fill-note">填充題固定顯示中文提示，請輸入英文；不分大小寫，常見斜線與括號變體都可作答。</p>}
             <div className="quiz-timer-picker">
               <label>
                 <input type="checkbox" checked={timerEnabled} onChange={(event) => setTimerEnabled(event.target.checked)} />
@@ -299,7 +340,7 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
             </div>
             <div className="quiz-summary">
               <strong>Day {effectiveStart}{effectiveEnd !== effectiveStart ? `–${effectiveEnd}` : ""}</strong>
-              <span>{scope.length} 題 · {directionModeLabels[directionMode]}四選一{timerEnabled ? ` · 每題 ${timerSeconds} 秒` : ""}</span>
+              <span>{scope.length} 題 · {questionType === "fill" ? "中譯填英文" : `${directionModeLabels[directionMode]}四選一`}{timerEnabled ? ` · 每題 ${timerSeconds} 秒` : ""}</span>
             </div>
             <button className="primary-button full" onClick={startQuiz} disabled={!scope.length}>開始測驗</button>
 
@@ -307,7 +348,7 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
               <h3>最近測驗</h3>
               {history.slice(0, 5).map((entry) => (
                 <div key={entry.id}>
-                  <span>{formatHistoryDate(entry.completedAt)} · Day {entry.startDay}{entry.endDay !== entry.startDay ? `–${entry.endDay}` : ""}{entry.directionMode ? ` · ${directionModeLabels[entry.directionMode]}` : ""}{entry.statusFilters?.length ? ` · ${entry.statusFilters.map((status) => statusLabels[status]).join("＋")}` : ""}{entry.timerSeconds ? ` · ${entry.timerSeconds} 秒` : ""}</span>
+                  <span>{formatHistoryDate(entry.completedAt)} · Day {entry.startDay}{entry.endDay !== entry.startDay ? `–${entry.endDay}` : ""}{entry.questionType === "fill" ? " · 填充題" : entry.directionMode ? ` · ${directionModeLabels[entry.directionMode]}` : ""}{entry.statusFilters?.length ? ` · ${entry.statusFilters.map((status) => statusLabels[status]).join("＋")}` : ""}{entry.timerSeconds ? ` · ${entry.timerSeconds} 秒` : ""}</span>
                   <strong>{entry.correct} / {entry.total}</strong>
                 </div>
               ))}
@@ -323,23 +364,41 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
               <strong>{timerEnabled && <b className={`quiz-timer-clock ${remainingSeconds <= 5 ? "urgent" : ""}`}>⏱ {remainingSeconds} 秒</b>}{Math.round(((questionIndex + 1) / questions.length) * 100)}%</strong>
             </div>
             <div className="quiz-progress-track"><i style={{ width: `${((questionIndex + 1) / questions.length) * 100}%` }} /></div>
-            <p className="quiz-direction">{current.direction === "en-to-zh" ? "選出最合適的中文意思" : "選出對應的英文單字"}</p>
+            <p className="quiz-direction">{questionType === "fill" ? "請輸入對應的英文單字" : current.direction === "en-to-zh" ? "選出最合適的中文意思" : "選出對應的英文單字"}</p>
             <h2 className={current.direction === "zh-to-en" ? "quiz-prompt chinese" : "quiz-prompt"}>{current.prompt}</h2>
-            <div className="quiz-options">
-              {current.options.map((option, index) => {
-                const isCorrect = selected && option === current.answer;
-                const isWrong = selected === option && option !== current.answer;
-                return (
-                  <button key={option} className={`${isCorrect ? "correct" : ""} ${isWrong ? "wrong" : ""}`} onClick={() => answer(option)} disabled={Boolean(selected)}>
-                    <span>{String.fromCharCode(65 + index)}</span>{option}
-                  </button>
-                );
-              })}
-            </div>
+            {questionType === "choice" ? (
+              <div className="quiz-options">
+                {current.options.map((option, index) => {
+                  const isCorrect = selected && option === current.answer;
+                  const isWrong = selected === option && option !== current.answer;
+                  return (
+                    <button key={option} className={`${isCorrect ? "correct" : ""} ${isWrong ? "wrong" : ""}`} onClick={() => answer(option)} disabled={Boolean(selected)}>
+                      <span>{String.fromCharCode(65 + index)}</span>{option}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <form className="quiz-fill-answer" onSubmit={(event) => { event.preventDefault(); submitFillAnswer(); }}>
+                <label htmlFor="quiz-fill-input">英文答案</label>
+                <input
+                  id="quiz-fill-input"
+                  value={fillAnswer}
+                  onChange={(event) => setFillAnswer(event.target.value)}
+                  disabled={Boolean(selected)}
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  placeholder="輸入英文單字"
+                  autoFocus
+                />
+                <button className="primary-button" type="submit" disabled={Boolean(selected) || !fillAnswer.trim()}>送出答案</button>
+              </form>
+            )}
             {selected && (
-              <div className={`quiz-feedback ${selected === current.answer ? "correct" : "wrong"}`}>
-                <strong>{selected === current.answer ? "答對了" : selected === TIMEOUT_VALUE ? "時間到" : "答錯了"}</strong>
-                {selected !== current.answer && <span>正確答案：{current.answer}</span>}
+              <div className={`quiz-feedback ${currentAnswerCorrect ? "correct" : "wrong"}`}>
+                <strong>{currentAnswerCorrect ? "答對了" : selected === TIMEOUT_VALUE ? "時間到" : "答錯了"}</strong>
+                {!currentAnswerCorrect && <span>正確答案：{current.answer}</span>}
               </div>
             )}
             <button className="primary-button full quiz-next" onClick={nextQuestion} disabled={!selected}>
