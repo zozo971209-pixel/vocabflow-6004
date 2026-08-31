@@ -35,3 +35,30 @@ export function acceptedFillAnswers(headword: string) {
 export function isFillAnswerCorrect(input: string, headword: string) {
   return acceptedFillAnswers(headword).includes(normalizeFillAnswer(input));
 }
+
+export function normalizeChineseAnswer(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[\s，。；;、,.!?！？（）()\[\]「」『』：:]/g, "")
+    .trim();
+}
+
+export function acceptedChineseAnswers(meaning: string) {
+  const parts = meaning
+    .replace(/\\n/g, "\n")
+    .replace(/\[[^\]]+]/g, " ")
+    .replace(/\([^)]{1,24}\)/g, " ")
+    .replace(/\b(?:vt|vi|v|n|a|ad|adj|adv|prep|pron|conj|art|num)\.\s*/gi, " ")
+    .split(/[\n；;，,、/|]+/)
+    .map((part) => normalizeChineseAnswer(part))
+    .filter(Boolean);
+  return [...new Set(parts)];
+}
+
+export function isChineseMeaningCorrect(input: string, meaning: string) {
+  const normalized = normalizeChineseAnswer(input);
+  if (!normalized) return false;
+  return acceptedChineseAnswers(meaning).some((answer) => (
+    answer === normalized || (normalized.length >= 2 && answer.startsWith(normalized))
+  ));
+}
