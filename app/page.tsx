@@ -6,6 +6,7 @@ import WordDetails from "./WordDetails";
 import { isVerifiedEnrichmentRecord, VerifiedEnrichmentRecord } from "./enrichment";
 import { AiEnrichmentPayload, AiEnrichmentWord, isAiEnrichmentPayload } from "./aiEnrichment";
 import { buildWordFamilyMap } from "./wordEnhancements";
+import { parseMeaningGroups } from "./meaningGroups";
 
 type Word = {
   id: number;
@@ -33,6 +34,7 @@ const STORAGE_KEY = "vocab6004-progress-v1";
 const SETTINGS_KEY = "vocab6004-settings-v1";
 const QUIZ_HISTORY_KEY = "vocab6004-quiz-history-v1";
 const NOTES_KEY = "vocab6004-notes-v1";
+const SPEECH_SPEED_VERSION = 2;
 const WORDS_PER_DAY = 50;
 const BASE_PATH = "/vocabflow-6004";
 const today = new Date().toISOString().slice(0, 10);
@@ -69,9 +71,7 @@ function speak(text: string, lang: "en-US" | "zh-TW", speed: SpeechSpeed) {
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(cleanSpeechText(text, lang));
   utterance.lang = lang;
-  utterance.rate = speed === "slow"
-    ? (lang === "en-US" ? 0.52 : 0.58)
-    : (lang === "en-US" ? 0.96 : 1);
+  utterance.rate = speed === "slow" ? 0.26 : 0.52;
   const voices = window.speechSynthesis.getVoices();
   utterance.voice = voices.find((voice) => voice.lang === lang) ??
     voices.find((voice) => voice.lang.startsWith(lang.slice(0, 2))) ?? null;
@@ -119,7 +119,7 @@ export default function Home() {
   const [statuses, setStatuses] = useState<StatusMap>({});
   const [currentDay, setCurrentDay] = useState(1);
   const [startDate, setStartDate] = useState(today);
-  const [speechSpeed, setSpeechSpeed] = useState<SpeechSpeed>("slow");
+  const [speechSpeed, setSpeechSpeed] = useState<SpeechSpeed>("normal");
   const [theme, setTheme] = useState<ThemeMode>("light");
   const [fontSize, setFontSize] = useState<FontSizeMode>("normal");
   const [wordNotes, setWordNotes] = useState<Record<number, string>>({});
@@ -162,7 +162,7 @@ export default function Home() {
         const settings = JSON.parse(savedSettings);
         setCurrentDay(settings.currentDay ?? 1);
         setStartDate(settings.startDate ?? today);
-        setSpeechSpeed(settings.speechSpeed ?? "slow");
+        setSpeechSpeed(settings.speechSpeedVersion === SPEECH_SPEED_VERSION && settings.speechSpeed === "slow" ? "slow" : "normal");
         setTheme(settings.theme === "dark" ? "dark" : "light");
         setFontSize(["small", "normal", "large"].includes(settings.fontSize) ? settings.fontSize : "normal");
       }
@@ -179,7 +179,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!loaded) return;
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ currentDay, startDate, speechSpeed, theme, fontSize }));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ currentDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize }));
   }, [currentDay, startDate, speechSpeed, theme, fontSize, loaded]);
 
   useEffect(() => {
@@ -290,7 +290,7 @@ export default function Home() {
       app: "詞序 VocabFlow",
       progress: {
         statuses,
-        settings: { currentDay: safeDay, startDate, speechSpeed, theme, fontSize },
+        settings: { currentDay: safeDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize },
         quizHistory,
         notes: wordNotes,
       },
@@ -337,6 +337,7 @@ export default function Home() {
       const rawDay = importedSettings.currentDay;
       const rawStartDate = importedSettings.startDate;
       const rawSpeed = importedSettings.speechSpeed;
+      const rawSpeedVersion = importedSettings.speechSpeedVersion;
       const rawTheme = importedSettings.theme;
       const rawFontSize = importedSettings.fontSize;
       if (typeof rawDay !== "number" || !Number.isFinite(rawDay) ||
@@ -348,7 +349,7 @@ export default function Home() {
       setStatuses(nextStatuses);
       setCurrentDay(Math.max(1, Math.min(totalDays, Math.round(rawDay))));
       setStartDate(rawStartDate);
-      setSpeechSpeed(rawSpeed);
+      setSpeechSpeed(rawSpeedVersion === SPEECH_SPEED_VERSION && rawSpeed === "slow" ? "slow" : "normal");
       if (rawTheme === "light" || rawTheme === "dark") setTheme(rawTheme);
       if (rawFontSize === "small" || rawFontSize === "normal" || rawFontSize === "large") setFontSize(rawFontSize);
       if (progress.notes && typeof progress.notes === "object" && !Array.isArray(progress.notes)) {
@@ -486,8 +487,27 @@ export default function Home() {
                   <button className="speak-button" onClick={() => speak(word.word, "en-US", speechSpeed)} aria-label={`朗讀 ${word.word}`}>▶<small>EN</small></button>
                 </div>
                 <div className="meaning">
-                  <p>{word.meaning}</p>
-                  <button className="speak-link" onClick={() => speak(word.meaning, "zh-TW", speechSpeed)}>▶ 中文朗讀</button>
+                  <div className="meaning-groups">
+                    {parseMeaningGroups(word.meaning, word.pos).map((group) => (
+                      <div className="meaning-group" key={group.key}>
+                        <div className={`meaning-pos pos-${group.abbreviation.replace(".", "") || "general"}`}>
+                          <span>{group.label}</span>
+                          {group.abbreviation && <small>{group.abbreviation}</small>}
+                          {group.sourceField && <small>[{group.sourceField}]</small>}
+                        </div>
+                        <p className="meaning-senses">
+                          <span className="primary-label">主要</span>
+                          {group.primary.map((sense, index) => <span key={`${sense}-${index}`}>{index > 0 && "、"}<strong>{sense}</strong></span>)}
+                          {group.secondary.length > 0 && <span className="secondary-senses">；{group.secondary.join("、")}</span>}
+                        </p>
+                        {group.supplements.map((supplement) => (
+                          <p className="meaning-supplement" key={`${supplement.field}-${supplement.senses.join("-")}`}>
+                            <span>[{supplement.field}]</span> {supplement.senses.join("、")}
+                          </p>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 {word.note && <p className="note">備註：{word.note}</p>}
                 <div className="status-actions" role="group" aria-label={`${word.word} 的熟悉度`}>
