@@ -13,7 +13,7 @@ https://zozo971209-pixel.github.io/vocabflow-6004/
 - 每天平均混合第 1–6 級與不同字母開頭
 - 英文朗讀可切換正常（0.52）／慢速（0.26）／超慢速（0.13），並在朗讀前移除斜線、括號、詞性與音標等符號
 - 已熟悉、待複習與不熟標記
-- 中文解釋依不同詞性分行，只顯示中文詞性名稱；以「主要」標籤及粗體標示原字典排序前兩個義項
+- 中文解釋依不同詞性分行，只顯示中文詞性名稱；依 ECDICT 的 Oxford 3000、Collins 星級與語料庫詞頻保守標示「常用」。只有該詞性恰有一個核心中文義項時才將義項粗體，多義詞不依字典順序猜測
 - 當日 50 詞或自訂天數範圍測驗，可選四選一或填充題；兩種題型都支援中英雙向與隨機出題，英填中只需回答一個正確中文意思
 - 可選每題計時並自訂 5–300 秒；時間到顯示答案，不會自動跳題
 - 測驗可複選已熟悉、待複習與不熟，並與所選天數範圍交集出題
@@ -42,6 +42,8 @@ npm run dev
 延伸學習資料由 `public/enrichment.json` 載入。匯出流程只接受欄位完整、具可追溯來源，且 `verification_status` 為 `human_verified` 的資料；未完成核對的候選內容不會作為正式資料顯示。
 
 AI／詞典自動整理資料由 `public/enrichment-ai.json` 載入。可使用 `node scripts/build-ai-enrichment.mjs <Open English WordNet JSON 目錄>` 重新產生。
+
+常用度證據由 `public/usage-evidence.json` 載入，可使用 `python scripts/build-usage-evidence.py <ECDICT CSV 路徑>` 重新產生。本站目前沒有逐題核對臺灣歷屆大考題目的義項資料，因此不會把官方詞表本身誤稱為「常考」。
 
 ## 權利說明
 

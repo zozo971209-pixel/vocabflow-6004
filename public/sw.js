@@ -1,6 +1,6 @@
-const CACHE_NAME = "vocabflow-offline-v3";
+const CACHE_NAME = "vocabflow-offline-v4";
 const BASE = "/vocabflow-6004";
-const CORE = [`${BASE}/`, `${BASE}/vocab.json`, `${BASE}/enrichment.json`, `${BASE}/enrichment-ai.json`, `${BASE}/favicon.svg`, `${BASE}/icon-192.png`, `${BASE}/icon-512.png`, `${BASE}/manifest.webmanifest`, `${BASE}/RIGHTS.md`];
+const CORE = [`${BASE}/`, `${BASE}/vocab.json`, `${BASE}/enrichment.json`, `${BASE}/enrichment-ai.json`, `${BASE}/usage-evidence.json`, `${BASE}/favicon.svg`, `${BASE}/icon-192.png`, `${BASE}/icon-512.png`, `${BASE}/manifest.webmanifest`, `${BASE}/RIGHTS.md`];
 
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {

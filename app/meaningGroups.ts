@@ -3,8 +3,7 @@ export type MeaningGroup = {
   abbreviation: string;
   label: string;
   sourceField?: string;
-  primary: string[];
-  secondary: string[];
+  senses: string[];
   supplements: { field: string; senses: string[] }[];
 };
 
@@ -45,8 +44,7 @@ export function parseMeaningGroups(meaning: string, fallbackPos = ""): MeaningGr
         key: `general-${groups.length}`,
         abbreviation: "",
         label: "一般用法",
-        primary: [],
-        secondary: [],
+        senses: [],
         supplements: [],
       };
       groups.push(current);
@@ -70,8 +68,7 @@ export function parseMeaningGroups(meaning: string, fallbackPos = ""): MeaningGr
             abbreviation: fallbackAbbreviation ? `${fallbackAbbreviation}.` : "",
             label: fallbackAbbreviation ? (POS_LABELS[fallbackAbbreviation] ?? fallbackAbbreviation) : "一般用法",
             sourceField: field,
-            primary: senses.slice(0, 2),
-            secondary: senses.slice(2),
+            senses,
             supplements: [],
           };
           groups.push(current);
@@ -90,8 +87,7 @@ export function parseMeaningGroups(meaning: string, fallbackPos = ""): MeaningGr
         key: `${abbreviation ?? "general"}-${groups.length}`,
         abbreviation: abbreviation ? `${abbreviation}.` : "",
         label: abbreviation ? (POS_LABELS[abbreviation] ?? abbreviation) : "一般用法",
-        primary: senses.slice(0, 2),
-        secondary: senses.slice(2),
+        senses,
         supplements: [],
       };
       groups.push(current);
