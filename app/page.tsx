@@ -20,7 +20,7 @@ type Word = {
 
 type WordStatus = QuizWordStatus;
 type StatusMap = Record<number, WordStatus>;
-type SpeechSpeed = "slow" | "normal";
+type SpeechSpeed = "ultraSlow" | "slow" | "normal";
 type ThemeMode = "light" | "dark";
 type FontSizeMode = "small" | "normal" | "large";
 type BackupFeedback = { type: "success" | "error"; text: string } | null;
@@ -34,7 +34,7 @@ const STORAGE_KEY = "vocab6004-progress-v1";
 const SETTINGS_KEY = "vocab6004-settings-v1";
 const QUIZ_HISTORY_KEY = "vocab6004-quiz-history-v1";
 const NOTES_KEY = "vocab6004-notes-v1";
-const SPEECH_SPEED_VERSION = 2;
+const SPEECH_SPEED_VERSION = 3;
 const WORDS_PER_DAY = 50;
 const BASE_PATH = "/vocabflow-6004";
 const today = new Date().toISOString().slice(0, 10);
@@ -44,6 +44,24 @@ const statusMeta: Record<WordStatus, { label: string; icon: string }> = {
   review: { label: "待複習", icon: "↻" },
   unknown: { label: "不熟", icon: "!" },
 };
+
+const speechRates: Record<SpeechSpeed, number> = {
+  normal: 0.52,
+  slow: 0.26,
+  ultraSlow: 0.13,
+};
+
+function restoreSpeechSpeed(value: unknown, version: unknown): SpeechSpeed {
+  if (version === SPEECH_SPEED_VERSION && value === "ultraSlow") return "ultraSlow";
+  if ((version === 2 || version === SPEECH_SPEED_VERSION) && value === "slow") return "slow";
+  return "normal";
+}
+
+function nextSpeechSpeed(value: SpeechSpeed): SpeechSpeed {
+  if (value === "normal") return "slow";
+  if (value === "slow") return "ultraSlow";
+  return "normal";
+}
 
 function cleanSpeechText(text: string, lang: "en-US" | "zh-TW") {
   if (lang === "en-US") {
@@ -71,7 +89,7 @@ function speak(text: string, lang: "en-US" | "zh-TW", speed: SpeechSpeed) {
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(cleanSpeechText(text, lang));
   utterance.lang = lang;
-  utterance.rate = speed === "slow" ? 0.26 : 0.52;
+  utterance.rate = speechRates[speed];
   const voices = window.speechSynthesis.getVoices();
   utterance.voice = voices.find((voice) => voice.lang === lang) ??
     voices.find((voice) => voice.lang.startsWith(lang.slice(0, 2))) ?? null;
@@ -162,7 +180,7 @@ export default function Home() {
         const settings = JSON.parse(savedSettings);
         setCurrentDay(settings.currentDay ?? 1);
         setStartDate(settings.startDate ?? today);
-        setSpeechSpeed(settings.speechSpeedVersion === SPEECH_SPEED_VERSION && settings.speechSpeed === "slow" ? "slow" : "normal");
+        setSpeechSpeed(restoreSpeechSpeed(settings.speechSpeed, settings.speechSpeedVersion));
         setTheme(settings.theme === "dark" ? "dark" : "light");
         setFontSize(["small", "normal", "large"].includes(settings.fontSize) ? settings.fontSize : "normal");
       }
@@ -342,14 +360,14 @@ export default function Home() {
       const rawFontSize = importedSettings.fontSize;
       if (typeof rawDay !== "number" || !Number.isFinite(rawDay) ||
           typeof rawStartDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(rawStartDate) ||
-          (rawSpeed !== "slow" && rawSpeed !== "normal")) {
+          (rawSpeed !== "ultraSlow" && rawSpeed !== "slow" && rawSpeed !== "normal")) {
         throw new Error("備份檔中的學習設定格式不正確。");
       }
 
       setStatuses(nextStatuses);
       setCurrentDay(Math.max(1, Math.min(totalDays, Math.round(rawDay))));
       setStartDate(rawStartDate);
-      setSpeechSpeed(rawSpeedVersion === SPEECH_SPEED_VERSION && rawSpeed === "slow" ? "slow" : "normal");
+      setSpeechSpeed(restoreSpeechSpeed(rawSpeed, rawSpeedVersion));
       if (rawTheme === "light" || rawTheme === "dark") setTheme(rawTheme);
       if (rawFontSize === "small" || rawFontSize === "normal" || rawFontSize === "large") setFontSize(rawFontSize);
       if (progress.notes && typeof progress.notes === "object" && !Array.isArray(progress.notes)) {
@@ -462,8 +480,8 @@ export default function Home() {
             <option value="unknown">不熟</option>
             <option value="unmarked">未標記</option>
           </select>
-          <button className="speech-mode" onClick={() => setSpeechSpeed((value) => value === "slow" ? "normal" : "slow")} aria-label="切換朗讀速度">
-            <span>▶</span>朗讀：{speechSpeed === "slow" ? "慢速" : "正常"}
+          <button className="speech-mode" onClick={() => setSpeechSpeed(nextSpeechSpeed)} aria-label="切換朗讀速度">
+            <span>▶</span>朗讀：{speechSpeed === "ultraSlow" ? "超慢速" : speechSpeed === "slow" ? "慢速" : "正常"}
           </button>
         </section>
 
@@ -492,7 +510,6 @@ export default function Home() {
                       <div className="meaning-group" key={group.key}>
                         <div className={`meaning-pos pos-${group.abbreviation.replace(".", "") || "general"}`}>
                           <span>{group.label}</span>
-                          {group.abbreviation && <small>{group.abbreviation}</small>}
                           {group.sourceField && <small>[{group.sourceField}]</small>}
                         </div>
                         <p className="meaning-senses">
