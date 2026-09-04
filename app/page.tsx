@@ -5,7 +5,7 @@ import QuizModal, { QuizHistoryEntry, QuizWordStatus } from "./QuizModal";
 import WordDetails from "./WordDetails";
 import { isVerifiedEnrichmentRecord, VerifiedEnrichmentRecord } from "./enrichment";
 import { AiEnrichmentPayload, AiEnrichmentWord, isAiEnrichmentPayload } from "./aiEnrichment";
-import { BilingualExample, BilingualExamplePayload, isBilingualExamplePayload } from "./bilingualExamples";
+import { BilingualExample, isBilingualExamplePayload } from "./bilingualExamples";
 import { buildWordFamilyMap } from "./wordEnhancements";
 import { parseMeaningGroups } from "./meaningGroups";
 
@@ -144,9 +144,9 @@ export default function Home() {
   const [wordNotes, setWordNotes] = useState<Record<number, string>>({});
   const [enrichmentRecords, setEnrichmentRecords] = useState<VerifiedEnrichmentRecord[]>([]);
   const [aiEnrichment, setAiEnrichment] = useState<Record<string, AiEnrichmentWord>>({});
+  const [aiGlosses, setAiGlosses] = useState<Record<string, string>>({});
   const [aiEnrichmentMeta, setAiEnrichmentMeta] = useState<Pick<AiEnrichmentPayload, "notice" | "source"> | null>(null);
   const [bilingualExamples, setBilingualExamples] = useState<Record<string, BilingualExample[]>>({});
-  const [bilingualExampleMeta, setBilingualExampleMeta] = useState<Pick<BilingualExamplePayload, "notice" | "source"> | null>(null);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [pwaFeedback, setPwaFeedback] = useState("");
   const [query, setQuery] = useState("");
@@ -177,11 +177,11 @@ export default function Home() {
       }
       if (isAiEnrichmentPayload(aiData)) {
         setAiEnrichment(aiData.words);
+        setAiGlosses(aiData.glosses ?? {});
         setAiEnrichmentMeta({ notice: aiData.notice, source: aiData.source });
       }
       if (isBilingualExamplePayload(exampleData)) {
         setBilingualExamples(exampleData.words);
-        setBilingualExampleMeta({ notice: exampleData.notice, source: exampleData.source });
       }
       if (savedStatuses) setStatuses(JSON.parse(savedStatuses));
       if (savedSettings) {
@@ -547,8 +547,8 @@ export default function Home() {
                   records={enrichmentMap.get(word.id) ?? []}
                   aiData={aiEnrichment[String(word.id)]}
                   aiMeta={aiEnrichmentMeta}
+                  aiGlosses={aiGlosses}
                   examples={bilingualExamples[String(word.id)] ?? []}
-                  exampleMeta={bilingualExampleMeta}
                   personalNote={wordNotes[word.id] ?? ""}
                   onNoteChange={updateWordNote}
                 />

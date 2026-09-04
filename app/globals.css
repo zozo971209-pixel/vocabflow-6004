@@ -385,6 +385,8 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .word-details-content .candidate-item { margin-top: 8px; padding-top: 7px; border-top: 1px dashed var(--line); color: var(--muted); }
 .ai-detail-list { display: grid; gap: 5px; margin: 0; padding-left: 17px; color: var(--ink); font-size: 11px; line-height: 1.5; }
 .ai-detail-list li { overflow-wrap: anywhere; }
+.ai-detail-list li > span { font-weight: 750; }
+.ai-detail-list li > small { display: block; color: var(--muted); font-size: 10px; line-height: 1.45; }
 .detail-label { margin-top: 9px !important; color: var(--muted) !important; font-size: 9px !important; font-weight: 800; letter-spacing: .04em; }
 .ai-example-list { display: grid; gap: 8px; }
 .ai-example-list p { padding-bottom: 8px; border-bottom: 1px dashed var(--line); overflow-wrap: anywhere; }
@@ -392,10 +394,6 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .ai-example-list .example-english { display: block; font-size: 11px; line-height: 1.55; }
 .ai-example-list .example-translation { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; line-height: 1.55; }
 .ai-example-list .example-target { color: var(--indigo); font-weight: 900; }
-.ai-example-list .example-link { display: inline-block; margin-top: 3px; color: var(--indigo); font-size: 8px; text-decoration: none; }
-.ai-example-list .example-quality { display: inline-block; margin: 4px 6px 0 0; padding: 2px 6px; border-radius: 999px; color: var(--muted); background: var(--bg); font-size: 8px; }
-.word-details-content .example-source { margin-top: 8px; color: var(--muted); font-size: 9px; line-height: 1.45; overflow-wrap: anywhere; }
-.example-source a { color: var(--indigo); }
 .word-details-content .definition-note { margin-top: 9px; padding-top: 8px; border-top: 1px dashed var(--line); color: var(--muted); font-size: 9px; overflow-wrap: anywhere; }
 .ai-content-notice { grid-column: 1 / -1; padding: 11px; border: 1px solid #d9dcff; border-radius: 10px; background: #f0f1ff; color: var(--ink); }
 .ai-content-notice strong { display: block; margin-bottom: 4px; color: var(--indigo); font-size: 10px; }

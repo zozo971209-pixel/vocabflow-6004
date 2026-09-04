@@ -3,7 +3,7 @@
 import { irregularFormFor } from "./wordEnhancements";
 import { EnrichmentCategory, VerifiedEnrichmentRecord } from "./enrichment";
 import { AiEnrichmentPayload, AiEnrichmentWord } from "./aiEnrichment";
-import { BilingualExample, BilingualExamplePayload } from "./bilingualExamples";
+import { BilingualExample } from "./bilingualExamples";
 
 type Props = {
   wordId: number;
@@ -12,8 +12,8 @@ type Props = {
   records: VerifiedEnrichmentRecord[];
   aiData?: AiEnrichmentWord;
   aiMeta: Pick<AiEnrichmentPayload, "notice" | "source"> | null;
+  aiGlosses: Record<string, string>;
   examples: BilingualExample[];
-  exampleMeta: Pick<BilingualExamplePayload, "notice" | "source"> | null;
   personalNote: string;
   onNoteChange: (wordId: number, note: string) => void;
 };
@@ -35,9 +35,16 @@ function VerifiedItems({ records }: { records: VerifiedEnrichmentRecord[] }) {
   ))}</div>;
 }
 
-function AiList({ items, emptyText }: { items?: string[]; emptyText: string }) {
+function glossKey(value: string) {
+  return value.toLowerCase().replaceAll("_", " ").replace(/\s+/g, " ").trim();
+}
+
+function AiList({ items, emptyText, glosses }: { items?: string[]; emptyText: string; glosses?: Record<string, string> }) {
   if (!items?.length) return <p className="detail-empty">{emptyText}</p>;
-  return <ul className="ai-detail-list">{items.map((item) => <li key={item}>{item}</li>)}</ul>;
+  return <ul className="ai-detail-list">{items.map((item) => {
+    const gloss = glosses?.[glossKey(item)];
+    return <li key={item}><span>{item}</span>{gloss ? <small>— {gloss}</small> : null}</li>;
+  })}</ul>;
 }
 
 function verifiedFor(records: VerifiedEnrichmentRecord[], categories: EnrichmentCategory[]) {
@@ -49,13 +56,12 @@ function HighlightedText({ text, start, end }: { text: string; start: number; en
   return <>{text.slice(0, start)}<strong className="example-target">{text.slice(start, end)}</strong>{text.slice(end)}</>;
 }
 
-export default function WordDetails({ wordId, word, family, records, aiData, aiMeta, examples, exampleMeta, personalNote, onNoteChange }: Props) {
+export default function WordDetails({ wordId, word, family, records, aiData, aiMeta, aiGlosses, examples, personalNote, onNoteChange }: Props) {
   const irregular = irregularFormFor(word);
   const verifiedFamily = records.filter((record) => record.category === "word_family");
   const verifiedIrregular = records.filter((record) => record.category === "irregular_form");
   const combinedFamily = [...new Set([...(aiData?.family ?? []), ...family])].filter((item) => item.toLowerCase() !== word.toLowerCase());
   const combinedForms = [...new Set([...(irregular ? [irregular] : []), ...(aiData?.forms ?? [])])];
-  const hasCorpusExample = examples.some((example) => example.origin !== "ai-generated");
 
   return (
     <details className="word-details">
@@ -64,7 +70,7 @@ export default function WordDetails({ wordId, word, family, records, aiData, aiM
         <section>
           <h4>詞族整理</h4>
           <VerifiedItems records={verifiedFamily} />
-          <AiList items={combinedFamily} emptyText="目前沒有找到可直接對應的詞族。" />
+          <AiList items={combinedFamily} emptyText="目前沒有找到可直接對應的詞族。" glosses={aiGlosses} />
         </section>
         <section>
           <h4>詞形與不規則變化</h4>
@@ -74,7 +80,7 @@ export default function WordDetails({ wordId, word, family, records, aiData, aiM
         <section>
           <h4>搭配詞與句型練習</h4>
           <VerifiedItems records={verifiedFor(records, ["collocation"])} />
-          <AiList items={aiData?.collocations} emptyText="目前沒有可用的搭配資料。" />
+          <AiList items={aiData?.collocations} emptyText="目前沒有可用的搭配資料。" glosses={aiGlosses} />
         </section>
         <section>
           <h4>片語與固定用法</h4>
@@ -88,21 +94,15 @@ export default function WordDetails({ wordId, word, family, records, aiData, aiM
             <p key={example.englishSentenceId ? `${example.englishSentenceId}-${example.chineseSentenceId}` : `ai-${wordId}-${example.en}`}>
               <span className="example-english"><HighlightedText text={example.en} start={example.enStart} end={example.enEnd} /></span>
               <small className="example-translation"><HighlightedText text={example.zh} start={example.zhStart} end={example.zhEnd} /></small>
-              <span className="example-quality">{example.origin === "ai-generated" ? "AI 建立 · 自動檢查" : "語料來源 · 自動嚴格篩選"}</span>
-              {example.englishSentenceId ? <a className="example-link" href={`https://tatoeba.org/en/sentences/show/${example.englishSentenceId}`} target="_blank" rel="noreferrer">查看原句 #{example.englishSentenceId}</a> : null}
             </p>
           ))}</div> : <p className="detail-empty">目前沒有通過完整雙語與目標詞對應檢查的例句。</p>}
-          {examples.length && exampleMeta ? <p className="example-source">
-            {hasCorpusExample ? <>語料來源：<a href={exampleMeta.source.url} target="_blank" rel="noreferrer">{exampleMeta.source.title}</a> · <a href={exampleMeta.source.licenseUrl} target="_blank" rel="noreferrer">{exampleMeta.source.license}</a><br /></> : null}
-            {exampleMeta.notice}
-          </p> : null}
           {aiData?.definitions.length ? <p className="definition-note">詞典英文釋義：{aiData.definitions.join("；")}</p> : null}
         </section>
         <section>
           <h4>同義詞與反義詞</h4>
           <VerifiedItems records={verifiedFor(records, ["synonym", "antonym"])} />
           <p className="detail-label">同義詞</p>
-          <AiList items={aiData?.synonyms} emptyText="詞典未列出可直接替換的同義詞。" />
+          <AiList items={aiData?.synonyms} emptyText="詞典未列出可直接替換的同義詞。" glosses={aiGlosses} />
           <p className="detail-label">反義詞</p>
           <AiList items={aiData?.antonyms} emptyText="詞典未列出直接反義詞。" />
         </section>

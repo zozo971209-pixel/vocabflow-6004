@@ -13,15 +13,16 @@ export type AiEnrichmentWord = {
 };
 
 export type AiEnrichmentPayload = {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   notice: string;
   source: { title: string; url: string; license: string; licenseUrl: string };
   words: Record<string, AiEnrichmentWord>;
+  glosses?: Record<string, string>;
 };
 
 export function isAiEnrichmentPayload(value: unknown): value is AiEnrichmentPayload {
   if (!value || typeof value !== "object") return false;
   const payload = value as Partial<AiEnrichmentPayload>;
-  return payload.schemaVersion === 1 && Boolean(payload.words) && typeof payload.words === "object" &&
+  return (payload.schemaVersion === 1 || payload.schemaVersion === 2) && Boolean(payload.words) && typeof payload.words === "object" &&
     typeof payload.notice === "string" && Boolean(payload.source) && typeof payload.source?.url === "string";
 }
