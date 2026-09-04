@@ -225,7 +225,7 @@ export default function Home() {
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register(`${BASE_PATH}/sw.js`, { scope: `${BASE_PATH}/` }).catch(() => {
+      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=9`, { scope: `${BASE_PATH}/`, updateViaCache: "none" }).catch(() => {
         setPwaFeedback("離線功能註冊失敗，請重新整理後再試。");
       });
     }
