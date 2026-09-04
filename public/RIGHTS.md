@@ -11,8 +11,11 @@ Copyright © 2026 zozo971209-pixel. All rights reserved.
 上述權利聲明不包含第三方資料。第三方資料仍受其各自來源與授權條款規範：
 
 - 英文詞彙、詞性及六級分級：大學入學考試中心《高中英文參考詞彙表（111學年度起適用）》。原始來源：https://www.ceec.edu.tw/
-- 中文釋義、音標及常用度參考：由原始 Excel 與 ECDICT 英漢字典資料補充；常用度採用其 Oxford 3000、Collins 星級、BNC 與當代語料庫排名欄位。原始專案及 MIT 授權：https://github.com/skywind3000/ECDICT
-- 延伸學習的英文例句、詞義關係、同反義詞、詞形與部分片語：Open English WordNet 2025，依 CC BY 4.0 授權使用。來源：https://en-word.net/；授權：https://creativecommons.org/licenses/by/4.0/
+- 中文釋義與音標：由原始 Excel 所含的開源 ECDICT 英漢字典資料補充。原始專案及 MIT 授權：https://github.com/skywind3000/ECDICT
+- 延伸學習的英文釋義、詞義關係、同反義詞、詞形與部分片語：Open English WordNet 2025，依 CC BY 4.0 授權使用。來源：https://en-word.net/；授權：https://creativecommons.org/licenses/by/4.0/
+- 完整英中例句：Tatoeba，依 CC BY 2.0 FR 授權使用；中文經 OpenCC 轉為繁體。來源：https://tatoeba.org/；授權：https://creativecommons.org/licenses/by/2.0/fr/
+
+未能由 Tatoeba 句對涵蓋的詞條，其例句由本機 AI 依本站詞義資料產生，不屬於 Tatoeba 原句；網站會逐句標示來源類型，AI 例句也不會顯示 Tatoeba 原句連結。
 
 延伸學習內容經由程式與 AI 自動選取、合併及產生學習提示，並未逐筆完成人工核對。網站介面會在延伸內容下方顯示此限制；自動整理部分不應被視為 Open English WordNet 的原始表述或官方教學建議。
 

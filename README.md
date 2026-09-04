@@ -13,7 +13,8 @@ https://zozo971209-pixel.github.io/vocabflow-6004/
 - 每天平均混合第 1–6 級與不同字母開頭
 - 英文朗讀可切換正常（0.52）／慢速（0.26）／超慢速（0.13），並在朗讀前移除斜線、括號、詞性與音標等符號
 - 已熟悉、待複習與不熟標記
-- 中文解釋依不同詞性分行，只顯示中文詞性名稱；依 ECDICT 的 Oxford 3000、Collins 星級與語料庫詞頻保守標示「常用」。只有該詞性恰有一個核心中文義項時才將義項粗體，多義詞不依字典順序猜測
+- 中文解釋依詞性分組，法律、醫學、化學、電腦等專業義另列；不以粗體推測字義主次
+- 6,004 個詞條皆有完整英中例句：優先使用經程式嚴格篩選的 Tatoeba 句對，缺漏詞條再以本機 AI 依主要詞義補句；只將英文目標詞及中文對應詞加粗
 - 當日 50 詞或自訂天數範圍測驗，可選四選一或填充題；兩種題型都支援中英雙向與隨機出題，英填中只需回答一個正確中文意思
 - 可選每題計時並自訂 5–300 秒；時間到顯示答案，不會自動跳題
 - 測驗可複選已熟悉、待複習與不熟，並與所選天數範圍交集出題
@@ -43,7 +44,7 @@ npm run dev
 
 AI／詞典自動整理資料由 `public/enrichment-ai.json` 載入。可使用 `node scripts/build-ai-enrichment.mjs <Open English WordNet JSON 目錄>` 重新產生。
 
-常用度證據由 `public/usage-evidence.json` 載入，可使用 `python scripts/build-usage-evidence.py <ECDICT CSV 路徑>` 重新產生。本站目前沒有逐題核對臺灣歷屆大考題目的義項資料，因此不會把官方詞表本身誤稱為「常考」。
+雙語例句由 `public/bilingual-examples.json` 載入。可先使用 `python scripts/build-bilingual-examples.py <Tatoeba 下載資料夾>` 匯入語料句，再以 `python scripts/build-ai-example-fallbacks.py` 透過本機 Ollama 補齊缺漏；產生環境需提供 OpenCC。資料會檢查完整性、目標詞形、臺灣繁中、長度、重複及精準標示位置。AI 補句未經人工逐句核對，介面會清楚標示。
 
 ## 權利說明
 

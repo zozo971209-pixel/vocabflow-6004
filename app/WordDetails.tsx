@@ -3,6 +3,7 @@
 import { irregularFormFor } from "./wordEnhancements";
 import { EnrichmentCategory, VerifiedEnrichmentRecord } from "./enrichment";
 import { AiEnrichmentPayload, AiEnrichmentWord } from "./aiEnrichment";
+import { BilingualExample, BilingualExamplePayload } from "./bilingualExamples";
 
 type Props = {
   wordId: number;
@@ -11,6 +12,8 @@ type Props = {
   records: VerifiedEnrichmentRecord[];
   aiData?: AiEnrichmentWord;
   aiMeta: Pick<AiEnrichmentPayload, "notice" | "source"> | null;
+  examples: BilingualExample[];
+  exampleMeta: Pick<BilingualExamplePayload, "notice" | "source"> | null;
   personalNote: string;
   onNoteChange: (wordId: number, note: string) => void;
 };
@@ -21,7 +24,7 @@ function VerifiedItems({ records }: { records: VerifiedEnrichmentRecord[] }) {
     <article className="verified-item" key={record.recordId}>
       <div className="verified-heading"><span className="verified-badge">✓ 人工核對</span>{record.senseZh && <small>{record.senseZh}</small>}</div>
       {record.category === "example"
-        ? <p><strong>{record.exampleEn}</strong><br />{record.exampleZh}</p>
+        ? <p>{record.exampleEn}<br />{record.exampleZh}</p>
         : <p><strong>{record.contentEn}</strong>{record.contentZh && <> — {record.contentZh}</>}</p>}
       <p className="verified-source">
         來源：<a href={record.sourceUrl} target="_blank" rel="noreferrer">{record.sourceTitle}</a>
@@ -41,12 +44,18 @@ function verifiedFor(records: VerifiedEnrichmentRecord[], categories: Enrichment
   return records.filter((record) => categories.includes(record.category));
 }
 
-export default function WordDetails({ wordId, word, family, records, aiData, aiMeta, personalNote, onNoteChange }: Props) {
+function HighlightedText({ text, start, end }: { text: string; start: number; end: number }) {
+  if (start < 0 || end <= start || end > text.length) return text;
+  return <>{text.slice(0, start)}<strong className="example-target">{text.slice(start, end)}</strong>{text.slice(end)}</>;
+}
+
+export default function WordDetails({ wordId, word, family, records, aiData, aiMeta, examples, exampleMeta, personalNote, onNoteChange }: Props) {
   const irregular = irregularFormFor(word);
   const verifiedFamily = records.filter((record) => record.category === "word_family");
   const verifiedIrregular = records.filter((record) => record.category === "irregular_form");
   const combinedFamily = [...new Set([...(aiData?.family ?? []), ...family])].filter((item) => item.toLowerCase() !== word.toLowerCase());
   const combinedForms = [...new Set([...(irregular ? [irregular] : []), ...(aiData?.forms ?? [])])];
+  const hasCorpusExample = examples.some((example) => example.origin !== "ai-generated");
 
   return (
     <details className="word-details">
@@ -75,9 +84,18 @@ export default function WordDetails({ wordId, word, family, records, aiData, aiM
         <section>
           <h4>例句與造句提示</h4>
           <VerifiedItems records={verifiedFor(records, ["example"])} />
-          {aiData?.examples.length ? <div className="ai-example-list">{aiData.examples.map((example) => (
-            <p key={example.en}><strong>{example.en}</strong><small>中文理解提示：{example.zhHint}</small></p>
-          ))}</div> : <p className="detail-empty">請使用上方「{aiData?.collocations[0] ?? word}」完成一個句子，並對照主要中文詞義。</p>}
+          {examples.length ? <div className="ai-example-list">{examples.map((example) => (
+            <p key={example.englishSentenceId ? `${example.englishSentenceId}-${example.chineseSentenceId}` : `ai-${wordId}-${example.en}`}>
+              <span className="example-english"><HighlightedText text={example.en} start={example.enStart} end={example.enEnd} /></span>
+              <small className="example-translation"><HighlightedText text={example.zh} start={example.zhStart} end={example.zhEnd} /></small>
+              <span className="example-quality">{example.origin === "ai-generated" ? "AI 建立 · 自動檢查" : "語料來源 · 自動嚴格篩選"}</span>
+              {example.englishSentenceId ? <a className="example-link" href={`https://tatoeba.org/en/sentences/show/${example.englishSentenceId}`} target="_blank" rel="noreferrer">查看原句 #{example.englishSentenceId}</a> : null}
+            </p>
+          ))}</div> : <p className="detail-empty">目前沒有通過完整雙語與目標詞對應檢查的例句。</p>}
+          {examples.length && exampleMeta ? <p className="example-source">
+            {hasCorpusExample ? <>語料來源：<a href={exampleMeta.source.url} target="_blank" rel="noreferrer">{exampleMeta.source.title}</a> · <a href={exampleMeta.source.licenseUrl} target="_blank" rel="noreferrer">{exampleMeta.source.license}</a><br /></> : null}
+            {exampleMeta.notice}
+          </p> : null}
           {aiData?.definitions.length ? <p className="definition-note">詞典英文釋義：{aiData.definitions.join("；")}</p> : null}
         </section>
         <section>

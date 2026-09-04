@@ -5,6 +5,7 @@ import QuizModal, { QuizHistoryEntry, QuizWordStatus } from "./QuizModal";
 import WordDetails from "./WordDetails";
 import { isVerifiedEnrichmentRecord, VerifiedEnrichmentRecord } from "./enrichment";
 import { AiEnrichmentPayload, AiEnrichmentWord, isAiEnrichmentPayload } from "./aiEnrichment";
+import { BilingualExample, BilingualExamplePayload, isBilingualExamplePayload } from "./bilingualExamples";
 import { buildWordFamilyMap } from "./wordEnhancements";
 import { parseMeaningGroups } from "./meaningGroups";
 
@@ -24,16 +25,6 @@ type SpeechSpeed = "ultraSlow" | "slow" | "normal";
 type ThemeMode = "light" | "dark";
 type FontSizeMode = "small" | "normal" | "large";
 type BackupFeedback = { type: "success" | "error"; text: string } | null;
-type UsageEvidence = {
-  common: true;
-  basis: string[];
-  sourceWord: string;
-};
-
-type UsageEvidencePayload = {
-  schemaVersion: 1;
-  words: Record<string, UsageEvidence>;
-};
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -154,7 +145,8 @@ export default function Home() {
   const [enrichmentRecords, setEnrichmentRecords] = useState<VerifiedEnrichmentRecord[]>([]);
   const [aiEnrichment, setAiEnrichment] = useState<Record<string, AiEnrichmentWord>>({});
   const [aiEnrichmentMeta, setAiEnrichmentMeta] = useState<Pick<AiEnrichmentPayload, "notice" | "source"> | null>(null);
-  const [usageEvidence, setUsageEvidence] = useState<Record<string, UsageEvidence>>({});
+  const [bilingualExamples, setBilingualExamples] = useState<Record<string, BilingualExample[]>>({});
+  const [bilingualExampleMeta, setBilingualExampleMeta] = useState<Pick<BilingualExamplePayload, "notice" | "source"> | null>(null);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [pwaFeedback, setPwaFeedback] = useState("");
   const [query, setQuery] = useState("");
@@ -172,12 +164,12 @@ export default function Home() {
       fetch(`${BASE_PATH}/vocab.json`).then((res) => res.json()),
       fetch(`${BASE_PATH}/enrichment.json`).then((res) => res.json()),
       fetch(`${BASE_PATH}/enrichment-ai.json`).then((res) => res.json()),
-      fetch(`${BASE_PATH}/usage-evidence.json`).then((res) => res.json()),
+      fetch(`${BASE_PATH}/bilingual-examples.json`).then((res) => res.json()),
       Promise.resolve(localStorage.getItem(STORAGE_KEY)),
       Promise.resolve(localStorage.getItem(SETTINGS_KEY)),
       Promise.resolve(localStorage.getItem(QUIZ_HISTORY_KEY)),
       Promise.resolve(localStorage.getItem(NOTES_KEY)),
-    ]).then(([data, enrichment, aiData, usageData, savedStatuses, savedSettings, savedQuizHistory, savedNotes]) => {
+    ]).then(([data, enrichment, aiData, exampleData, savedStatuses, savedSettings, savedQuizHistory, savedNotes]) => {
       setWords(data as Word[]);
       if (enrichment && typeof enrichment === "object" && (enrichment as { schemaVersion?: unknown }).schemaVersion === 1) {
         const candidateRecords = (enrichment as { records?: unknown }).records;
@@ -187,8 +179,9 @@ export default function Home() {
         setAiEnrichment(aiData.words);
         setAiEnrichmentMeta({ notice: aiData.notice, source: aiData.source });
       }
-      if (usageData && typeof usageData === "object" && (usageData as UsageEvidencePayload).schemaVersion === 1) {
-        setUsageEvidence((usageData as UsageEvidencePayload).words ?? {});
+      if (isBilingualExamplePayload(exampleData)) {
+        setBilingualExamples(exampleData.words);
+        setBilingualExampleMeta({ notice: exampleData.notice, source: exampleData.source });
       }
       if (savedStatuses) setStatuses(JSON.parse(savedStatuses));
       if (savedSettings) {
@@ -509,15 +502,11 @@ export default function Home() {
           {filteredWords.map((word) => {
             const status = statuses[word.id];
             const dayRank = words.indexOf(word) % WORDS_PER_DAY + 1;
-            const commonEvidence = usageEvidence[String(word.id)];
             return (
               <article className={`word-card ${status ? `is-${status}` : ""}`} key={word.id}>
                 <div className="card-topline">
                   <span className="rank">#{dayRank} 本日順序</span>
-                  <div className="card-badges">
-                    {commonEvidence && <span className="priority-label" title="由 ECDICT 的 Oxford 3000、Collins 星級或語料庫排名判定">常用</span>}
-                    <span className={`level level-${word.level}`}>LEVEL {word.level}</span>
-                  </div>
+                  <span className={`level level-${word.level}`}>LEVEL {word.level}</span>
                 </div>
                 <div className="word-line">
                   <div><h3>{word.word}</h3><p>{word.pos} <span>{word.phonetic && `/ ${word.phonetic} /`}</span></p></div>
@@ -532,12 +521,7 @@ export default function Home() {
                           {group.sourceField && <small>[{group.sourceField}]</small>}
                         </div>
                         <p className="meaning-senses">
-                          {group.senses.map((sense, index) => {
-                            const content = commonEvidence && group.senses.length === 1
-                              ? <strong title="常用（此詞性只有一個核心義項）">{sense}</strong>
-                              : sense;
-                            return <span key={`${sense}-${index}`}>{index > 0 && "、"}{content}</span>;
-                          })}
+                          {group.senses.map((sense, index) => <span key={`${sense}-${index}`}>{index > 0 && "、"}{sense}</span>)}
                         </p>
                         {group.supplements.map((supplement) => (
                           <p className="meaning-supplement" key={`${supplement.field}-${supplement.senses.join("-")}`}>
@@ -563,6 +547,8 @@ export default function Home() {
                   records={enrichmentMap.get(word.id) ?? []}
                   aiData={aiEnrichment[String(word.id)]}
                   aiMeta={aiEnrichmentMeta}
+                  examples={bilingualExamples[String(word.id)] ?? []}
+                  exampleMeta={bilingualExampleMeta}
                   personalNote={wordNotes[word.id] ?? ""}
                   onNoteChange={updateWordNote}
                 />
@@ -650,7 +636,8 @@ export default function Home() {
             <p className="eyebrow">ABOUT THE DATA</p><h2 id="info-title">資料範圍與排序方式</h2>
             <div className="info-block"><strong>6,004 個官方詞條</strong><p>英文詞彙、詞性與六級分級來自大學入學考試中心《高中英文參考詞彙表（111學年度起適用）》。</p></div>
             <div className="info-block"><strong>中文不是大考中心官方翻譯</strong><p>中文釋義與音標由原 Excel 中的開源 ECDICT 英漢字典資料補充。</p></div>
-            <div className="info-block"><strong>「常用」與粗體的判定</strong><p>符合 ECDICT 的 Oxford 3000、Collins 4–5 星，或 BNC／當代語料庫排名前 3,000 任一條件，才標為常用。只有該詞性恰有一個核心中文義項時才將義項粗體；多義詞不依字典順序猜測。本站尚未逐題核對臺灣歷屆大考義項，因此目前不標「常考」。</p></div>
+            <div className="info-block"><strong>字義依用途分類，不標主次</strong><p>中文解釋依詞性分組，法律、醫學、化學、電腦等專業補充另列；不再以粗體推測哪個意思較常用。</p></div>
+            <div className="info-block"><strong>6,004 詞皆有完整雙語例句</strong><p>優先使用經嚴格篩選的 Tatoeba 英中句對；缺漏詞條由本機 AI 依主要詞義補句並通過格式檢查。粗體只標示句中的英文目標詞與中文對應詞，AI 補句會另行標示。</p></div>
             <div className="info-block"><strong>每日混合六級與不同字首</strong><p>每天固定安排 50 詞，第 1–6 級各約 8–9 詞，並分散不同英文字母開頭；卡片的 1–50 是當日學習順序。因官方總數為 6,004，第 121 天是剩餘的最後 4 詞。</p></div>
             <a className="source-link" href="https://www.ceec.edu.tw/files/file_pool/1/0k213571061045122620/%E9%AB%98%E4%B8%AD%E8%8B%B1%E6%96%87%E5%8F%83%E8%80%83%E8%A9%9E%E5%BD%99%E8%A1%A8%28111%E5%AD%B8%E5%B9%B4%E5%BA%A6%E8%B5%B7%E9%81%A9%E7%94%A8%29.pdf" target="_blank" rel="noreferrer">查看大考中心原始詞彙表 ↗</a>
           </section>
