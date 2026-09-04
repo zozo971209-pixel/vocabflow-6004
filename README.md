@@ -44,6 +44,8 @@ npm run dev
 
 AI／詞典自動整理資料由 `public/enrichment-ai.json` 載入。可使用 `node scripts/build-ai-enrichment.mjs <Open English WordNet JSON 目錄>` 重新產生英文延伸資料，再以 `python scripts/build-enrichment-glosses.py <ECDICT CSV>` 補上詞族、搭配詞與同義詞的繁體中文提示。後者會優先採用 ECDICT，只有查不到的詞組才交由本機 Ollama 翻譯；`python scripts/audit-enrichment-glosses.py` 可用多語嵌入模型篩查明顯錯配。
 
+搭配詞發布前可執行 `python scripts/clean-collocations.py`：固定格式的機械備援內容與從長句截出的片段會直接移除，只保留本身就是完整 WordNet 範例的自然搭配、完整短句及少數明確維護的基本用法。
+
 雙語例句由 `public/bilingual-examples.json` 載入。可先使用 `python scripts/build-bilingual-examples.py <Tatoeba 下載資料夾>` 匯入語料句，再以 `python scripts/build-ai-example-fallbacks.py` 透過本機 Ollama 補齊缺漏；產生環境需提供 OpenCC。資料會檢查完整性、目標詞形、臺灣繁中、長度、重複及精準標示位置。AI 補句未經人工逐句核對，介面會清楚標示。
 
 ## 權利說明

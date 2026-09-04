@@ -46,14 +46,6 @@ function lemmaFromSenseId(id) {
   return id ? display(id.split("%")[0]) : "";
 }
 
-function collocationFromExample(example, targets) {
-  const tokens = example.match(/[A-Za-z]+(?:['’-][A-Za-z]+)*/g) ?? [];
-  const normalizedTargets = new Set(targets.map(normalize));
-  const index = tokens.findIndex((token) => normalizedTargets.has(normalize(token)));
-  if (index < 0) return "";
-  return tokens.slice(Math.max(0, index - 2), Math.min(tokens.length, index + 3)).join(" ");
-}
-
 function exampleUsesTarget(example, targets) {
   const normalizedExample = normalize(example);
   return targets.some((targetValue) => {
@@ -113,7 +105,7 @@ for (const item of vocab) {
     const family = unique(senses.flatMap((sense) => sense.derivation ?? []).map(lemmaFromSenseId).filter((lemma) => !targetForms.some((target) => normalize(lemma) === normalize(target))), 8);
     const antonyms = unique(senses.flatMap((sense) => sense.antonym ?? []).map(lemmaFromSenseId), 8);
     const definitions = unique(relatedSynsets.flatMap((synset) => synset.definition ?? []), 2);
-    const collocations = unique(examples.map((example) => collocationFromExample(example, [...targetForms, ...forms])).filter(Boolean), 3);
+    const collocations = unique(examples, 3);
 
     data.definitions = definitions;
     data.family = family;
@@ -148,13 +140,6 @@ for (const item of vocab) {
       : ["可數性可能隨詞義與語境改變；Open English WordNet 未直接標註可數／不可數。"];
   } else {
     data.usage = [`主要詞性：${item.pos || "未標示"}；可數／不可數只適用名詞用法。`];
-  }
-
-  if (!data.collocations.length) {
-    if (/v\./i.test(item.pos)) data.collocations = [`to ${candidatesFor(item.word)[0]}（動詞原形練習）`];
-    else if (/adj\./i.test(item.pos)) data.collocations = [`be ${candidatesFor(item.word)[0]}（形容詞句型練習）`];
-    else if (isNoun) data.collocations = [`the ${candidatesFor(item.word)[0]}（名詞片語練習）`];
-    else data.collocations = [`${candidatesFor(item.word)[0]}（請搭配完整句子理解）`];
   }
 
   words[item.id] = data;
