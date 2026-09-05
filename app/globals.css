@@ -387,6 +387,13 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .ai-detail-list li { overflow-wrap: anywhere; }
 .ai-detail-list li > span { font-weight: 750; }
 .ai-detail-list li > small { display: block; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.primary-meaning { font-weight: 800; color: inherit; }
+.backup-preview { margin: 12px 0; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+.storage-error { padding: 14px; border: 1px solid #dc2626; border-radius: 10px; color: #b91c1c; background: #fff1f2; overflow-wrap: anywhere; }
+.ai-detail-list .synonym-distinction { margin-top: 3px; line-height: 1.65; }
+.quiz-mode-tabs { flex-wrap: wrap; }
+.quiz-result-actions { flex-wrap: wrap; }
+.quiz-mode-tabs button, .status-actions button, .word-details summary, .backup-button { min-height: 44px; }
 .detail-label { margin-top: 9px !important; color: var(--muted) !important; font-size: 9px !important; font-weight: 800; letter-spacing: .04em; }
 .ai-example-list { display: grid; gap: 8px; }
 .ai-example-list p { padding-bottom: 8px; border-bottom: 1px dashed var(--line); overflow-wrap: anywhere; }
@@ -416,6 +423,11 @@ html[data-font-size="small"] .word-line h3 { font-size: 25px; }
 html[data-font-size="large"] .word-card, html[data-font-size="large"] .modal, html[data-font-size="large"] .quiz-modal { font-size: 17px; }
 html[data-font-size="large"] .word-line h3 { font-size: 33px; }
 html[data-font-size="large"] .meaning p, html[data-font-size="large"] .word-details-content p, html[data-font-size="large"] .personal-note textarea { font-size: 15px; }
+html[data-font-size="large"] .ai-detail-list, html[data-font-size="large"] .word-details-content h4 { font-size: 15px; }
+html[data-font-size="large"] .example-english, html[data-font-size="large"] .quiz-options button, html[data-font-size="large"] .quiz-feedback { font-size: 16px; }
+html[data-font-size="large"] .ai-detail-list li > small, html[data-font-size="large"] .example-translation { font-size: 14px; }
+html[data-font-size="small"] .ai-detail-list { font-size: 10px; }
+html[data-font-size="small"] .ai-detail-list li > small, html[data-font-size="small"] .example-translation { font-size: 10px; }
 html[data-font-size="large"] .hero > div > p:last-child, html[data-font-size="large"] .source-banner p, html[data-font-size="large"] .info-block p { font-size: 14px; }
 html[data-font-size="large"] .modal > label span, html[data-font-size="large"] .setting-section p { font-size: 13px; }
 html[data-font-size="large"] input, html[data-font-size="large"] select, html[data-font-size="large"] textarea { font-size: 14px; }

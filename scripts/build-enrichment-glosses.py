@@ -128,11 +128,10 @@ def main() -> None:
     payload = json.loads(ENRICHMENT_PATH.read_text(encoding="utf-8"))
     cache = json.loads(CACHE_PATH.read_text(encoding="utf-8")) if CACHE_PATH.exists() else {}
     glosses: dict[str, str] = {}
-    # The official combined entry "am/a.m." mixes the verb form and time abbreviation;
-    # avoid the mechanically generated and ungrammatical "to am/a.m." practice phrase.
+    # The listed adverb is the time abbreviation, not the verb in "I am".
     if "188" in payload["words"]:
-        payload["words"]["188"]["collocations"] = ["I am ready"]
-        glosses["i am ready"] = "我準備好了"
+        payload["words"]["188"]["collocations"] = ["at 8 a.m."]
+        glosses["at 8 a.m."] = "在上午八點"
     if "3996" in payload["words"]:
         payload["words"]["3996"]["collocations"] = ["at 3 p.m."]
         glosses["at 3 p.m."] = "在下午三點"

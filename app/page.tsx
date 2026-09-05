@@ -8,6 +8,10 @@ import { AiEnrichmentPayload, AiEnrichmentWord, isAiEnrichmentPayload } from "./
 import { BilingualExample, isBilingualExamplePayload } from "./bilingualExamples";
 import { buildWordFamilyMap } from "./wordEnhancements";
 import { parseMeaningGroups } from "./meaningGroups";
+import { applyMeaningEditorial, isPrimaryMeaning } from "./meaningEditorial";
+import { dueReviewIds, localDate, ReviewMap, scheduleReview } from "./reviewSchedule";
+import { mergeProgress, parseProgressBackup, ProgressSnapshot } from "./progressBackup";
+import { persistProgress } from "./progressStorage";
 
 type Word = {
   id: number;
@@ -35,10 +39,12 @@ const STORAGE_KEY = "vocab6004-progress-v1";
 const SETTINGS_KEY = "vocab6004-settings-v1";
 const QUIZ_HISTORY_KEY = "vocab6004-quiz-history-v1";
 const NOTES_KEY = "vocab6004-notes-v1";
+const REVIEW_KEY = "vocab6004-review-v1";
+const UNDO_KEY = "vocab6004-import-undo-v1";
 const SPEECH_SPEED_VERSION = 3;
 const WORDS_PER_DAY = 50;
 const BASE_PATH = "/vocabflow-6004";
-const today = new Date().toISOString().slice(0, 10);
+const today = localDate();
 
 const statusMeta: Record<WordStatus, { label: string; icon: string }> = {
   known: { label: "已熟悉", icon: "✓" },
@@ -134,6 +140,8 @@ function dayNumberForDate(startDate: string, selectedDate: string) {
 
 export default function Home() {
   const importInputRef = useRef<HTMLInputElement>(null);
+  const readingPositions = useRef<Record<string, number>>({});
+  const pendingReadingPosition = useRef<number | null>(null);
   const [words, setWords] = useState<Word[]>([]);
   const [statuses, setStatuses] = useState<StatusMap>({});
   const [currentDay, setCurrentDay] = useState(1);
@@ -156,8 +164,13 @@ export default function Home() {
   const [infoOpen, setInfoOpen] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
   const [quizHistory, setQuizHistory] = useState<QuizHistoryEntry[]>([]);
+  const [reviewRecords, setReviewRecords] = useState<ReviewMap>({});
+  const [importPreview, setImportPreview] = useState<ReturnType<typeof parseProgressBackup> | null>(null);
+  const [canUndo, setCanUndo] = useState(false);
   const [backupFeedback, setBackupFeedback] = useState<BackupFeedback>(null);
   const [loaded, setLoaded] = useState(false);
+  const readyToSave = useRef(false);
+  const [storageError, setStorageError] = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -165,12 +178,12 @@ export default function Home() {
       fetch(`${BASE_PATH}/enrichment.json`).then((res) => res.json()),
       fetch(`${BASE_PATH}/enrichment-ai.json`).then((res) => res.json()),
       fetch(`${BASE_PATH}/bilingual-examples.json`).then((res) => res.json()),
-      Promise.resolve(localStorage.getItem(STORAGE_KEY)),
-      Promise.resolve(localStorage.getItem(SETTINGS_KEY)),
-      Promise.resolve(localStorage.getItem(QUIZ_HISTORY_KEY)),
-      Promise.resolve(localStorage.getItem(NOTES_KEY)),
+      Promise.resolve().then(() => localStorage.getItem(STORAGE_KEY)),
+      Promise.resolve().then(() => localStorage.getItem(SETTINGS_KEY)),
+      Promise.resolve().then(() => localStorage.getItem(QUIZ_HISTORY_KEY)),
+      Promise.resolve().then(() => localStorage.getItem(NOTES_KEY)),
     ]).then(([data, enrichment, aiData, exampleData, savedStatuses, savedSettings, savedQuizHistory, savedNotes]) => {
-      setWords(data as Word[]);
+      setWords((data as Word[]).map(applyMeaningEditorial));
       if (enrichment && typeof enrichment === "object" && (enrichment as { schemaVersion?: unknown }).schemaVersion === 1) {
         const candidateRecords = (enrichment as { records?: unknown }).records;
         if (Array.isArray(candidateRecords)) setEnrichmentRecords(candidateRecords.filter(isVerifiedEnrichmentRecord));
@@ -194,29 +207,36 @@ export default function Home() {
       }
       if (savedQuizHistory) setQuizHistory(JSON.parse(savedQuizHistory));
       if (savedNotes) setWordNotes(JSON.parse(savedNotes));
+      setCanUndo(Boolean(localStorage.getItem(UNDO_KEY)));
+      const savedReviews = localStorage.getItem(REVIEW_KEY);
+      if (savedReviews) setReviewRecords(JSON.parse(savedReviews));
+      else if (savedStatuses) {
+        const migrated: ReviewMap = {};
+        for (const [id] of Object.entries(JSON.parse(savedStatuses))) migrated[Number(id)] = { due: localDate(), last: "", streak: 0, mistakes: 0 };
+        setReviewRecords(migrated);
+      }
+      readyToSave.current = true;
       setLoaded(true);
-    }).catch(() => setLoaded(true));
+    }).catch(() => {
+      setStorageError("資料或既有紀錄載入失敗，已停止自動儲存以保護原有進度。請先保留原瀏覽器資料，確認網路與儲存權限後重新整理。");
+      setLoaded(true);
+    });
   }, []);
 
   useEffect(() => {
-    if (!loaded) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(statuses));
-  }, [statuses, loaded]);
-
-  useEffect(() => {
-    if (!loaded) return;
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ currentDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize }));
-  }, [currentDay, startDate, speechSpeed, theme, fontSize, loaded]);
-
-  useEffect(() => {
-    if (!loaded) return;
-    localStorage.setItem(QUIZ_HISTORY_KEY, JSON.stringify(quizHistory));
-  }, [quizHistory, loaded]);
-
-  useEffect(() => {
-    if (!loaded) return;
-    localStorage.setItem(NOTES_KEY, JSON.stringify(wordNotes));
-  }, [wordNotes, loaded]);
+    if (!loaded || !readyToSave.current) return;
+    let active = true;
+    Promise.resolve().then(() => {
+      if (!active) return;
+      try {
+        persistProgress(localStorage, { statuses, settings: { currentDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize }, quizHistory, notes: wordNotes, reviews: reviewRecords });
+        setStorageError("");
+      } catch (error) {
+        setStorageError(error instanceof Error ? error.message : "紀錄儲存失敗，請先匯出備份。");
+      }
+    });
+    return () => { active = false; };
+  }, [statuses, currentDay, startDate, speechSpeed, theme, fontSize, quizHistory, wordNotes, reviewRecords, loaded]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -225,7 +245,7 @@ export default function Home() {
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=9`, { scope: `${BASE_PATH}/`, updateViaCache: "none" }).catch(() => {
+      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=10`, { scope: `${BASE_PATH}/`, updateViaCache: "none" }).catch(() => {
         setPwaFeedback("離線功能註冊失敗，請重新整理後再試。");
       });
     }
@@ -245,6 +265,13 @@ export default function Home() {
     return map;
   }, [enrichmentRecords]);
   const safeDay = Math.min(currentDay, totalDays);
+  useEffect(() => {
+    if (pendingReadingPosition.current === null) return;
+    const top = pendingReadingPosition.current;
+    pendingReadingPosition.current = null;
+    const frame = requestAnimationFrame(() => window.scrollTo({ top, behavior: "instant" }));
+    return () => cancelAnimationFrame(frame);
+  }, [safeDay]);
   const selectedLearningDate = dateValueWithOffset(startDate, safeDay - 1);
   const planEndDate = dateValueWithOffset(startDate, totalDays - 1);
   const dayWords = useMemo(() => {
@@ -276,11 +303,24 @@ export default function Home() {
 
   function mark(id: number, status: WordStatus) {
     setStatuses((current) => ({ ...current, [id]: status }));
+    setReviewRecords(current => ({ ...current, [id]: scheduleReview(current[id], status === "known") }));
+  }
+
+  function completeQuiz(entry: QuizHistoryEntry) {
+    setQuizHistory(current => [entry, ...current].slice(0, 50));
+    setReviewRecords(current => {
+      const next = { ...current };
+      for (const id of entry.testedWordIds ?? []) next[id] = scheduleReview(current[id], !entry.wrongWordIds.includes(id));
+      return next;
+    });
   }
 
   function changeDay(next: number) {
-    setCurrentDay(Math.max(1, Math.min(totalDays, next)));
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    const destination = Math.max(1, Math.min(totalDays, Math.round(next) || 1));
+    if (destination === safeDay) return;
+    readingPositions.current[`${startDate}:${safeDay}`] = window.scrollY;
+    pendingReadingPosition.current = readingPositions.current[`${startDate}:${destination}`] ?? 0;
+    setCurrentDay(destination);
   }
 
   function changeLearningDate(dateString: string) {
@@ -319,6 +359,7 @@ export default function Home() {
         settings: { currentDay: safeDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize },
         quizHistory,
         notes: wordNotes,
+        reviews: reviewRecords,
       },
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
@@ -333,82 +374,66 @@ export default function Home() {
     setBackupFeedback({ type: "success", text: "備份檔已匯出，請妥善保存在手機檔案或雲端硬碟。" });
   }
 
+  function currentSnapshot(): ProgressSnapshot {
+    return { statuses, settings: { currentDay: safeDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize }, quizHistory, notes: wordNotes, reviews: reviewRecords };
+  }
+
+  function applySnapshot(next: ProgressSnapshot) {
+    setStatuses(next.statuses);
+    setCurrentDay(next.settings.currentDay);
+    setStartDate(next.settings.startDate);
+    setSpeechSpeed(restoreSpeechSpeed(next.settings.speechSpeed, next.settings.speechSpeedVersion));
+    setTheme(next.settings.theme);
+    setFontSize(next.settings.fontSize);
+    setWordNotes(next.notes);
+    setQuizHistory(next.quizHistory);
+    setReviewRecords(next.reviews);
+  }
+
   async function importProgress(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-
     try {
-      const backup = JSON.parse(await file.text()) as Record<string, unknown>;
-      if (backup.format !== "vocabflow-progress" || backup.version !== 1) {
-        throw new Error("這不是 VocabFlow 支援的進度備份檔。");
-      }
-
-      const progress = backup.progress as Record<string, unknown> | undefined;
-      const importedStatuses = progress?.statuses as Record<string, unknown> | undefined;
-      const importedSettings = progress?.settings as Record<string, unknown> | undefined;
-      if (!progress || !importedStatuses || !importedSettings) {
-        throw new Error("備份檔缺少必要的進度資料。");
-      }
-
-      const validIds = new Set(words.map((word) => word.id));
-      const nextStatuses: StatusMap = {};
-      for (const [rawId, value] of Object.entries(importedStatuses)) {
-        const id = Number(rawId);
-        if (validIds.has(id) && (value === "known" || value === "review" || value === "unknown")) {
-          nextStatuses[id] = value;
-        }
-      }
-
-      const rawDay = importedSettings.currentDay;
-      const rawStartDate = importedSettings.startDate;
-      const rawSpeed = importedSettings.speechSpeed;
-      const rawSpeedVersion = importedSettings.speechSpeedVersion;
-      const rawTheme = importedSettings.theme;
-      const rawFontSize = importedSettings.fontSize;
-      if (typeof rawDay !== "number" || !Number.isFinite(rawDay) ||
-          typeof rawStartDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(rawStartDate) ||
-          (rawSpeed !== "ultraSlow" && rawSpeed !== "slow" && rawSpeed !== "normal")) {
-        throw new Error("備份檔中的學習設定格式不正確。");
-      }
-
-      setStatuses(nextStatuses);
-      setCurrentDay(Math.max(1, Math.min(totalDays, Math.round(rawDay))));
-      setStartDate(rawStartDate);
-      setSpeechSpeed(restoreSpeechSpeed(rawSpeed, rawSpeedVersion));
-      if (rawTheme === "light" || rawTheme === "dark") setTheme(rawTheme);
-      if (rawFontSize === "small" || rawFontSize === "normal" || rawFontSize === "large") setFontSize(rawFontSize);
-      if (progress.notes && typeof progress.notes === "object" && !Array.isArray(progress.notes)) {
-        const nextNotes: Record<number, string> = {};
-        for (const [rawId, value] of Object.entries(progress.notes as Record<string, unknown>)) {
-          const id = Number(rawId);
-          if (validIds.has(id) && typeof value === "string" && value.length <= 500) nextNotes[id] = value;
-        }
-        setWordNotes(nextNotes);
-      }
-      if (Array.isArray(progress.quizHistory)) {
-        const nextHistory = progress.quizHistory.filter((entry): entry is QuizHistoryEntry => {
-          if (!entry || typeof entry !== "object") return false;
-          const item = entry as Record<string, unknown>;
-          return typeof item.id === "string" && typeof item.completedAt === "string" &&
-            typeof item.startDay === "number" && typeof item.endDay === "number" &&
-            typeof item.total === "number" && typeof item.correct === "number" &&
-            (item.directionMode === undefined || item.directionMode === "zh-to-en" || item.directionMode === "en-to-zh" || item.directionMode === "random") &&
-            (item.statusFilters === undefined || (Array.isArray(item.statusFilters) && item.statusFilters.every((status) => status === "known" || status === "review" || status === "unknown"))) &&
-            Array.isArray(item.wrongWordIds) && item.wrongWordIds.every((id) => typeof id === "number" && validIds.has(id)) &&
-            (item.timerSeconds === undefined || (typeof item.timerSeconds === "number" && item.timerSeconds >= 5 && item.timerSeconds <= 300));
-        }).slice(0, 50);
-        setQuizHistory(nextHistory);
-      }
-      setBackupFeedback({
-        type: "success",
-        text: `匯入完成，已恢復 ${Object.keys(nextStatuses).length} 個單字標記、學習設定、個人筆記${Array.isArray(progress.quizHistory) ? "與測驗紀錄" : ""}。`,
-      });
+      if (file.size > 10 * 1024 * 1024) throw new Error("備份檔過大，請選擇小於 10 MB 的進度檔。");
+      const preview = parseProgressBackup(JSON.parse(await file.text()), new Set(words.map(word => word.id)), totalDays);
+      setImportPreview(preview);
+      setBackupFeedback(null);
     } catch (error) {
-      setBackupFeedback({
-        type: "error",
-        text: error instanceof Error ? error.message : "匯入失敗，請確認選擇正確的備份檔。",
-      });
+      setImportPreview(null);
+      setBackupFeedback({ type: "error", text: error instanceof Error ? error.message : "無法讀取備份；尚未變更紀錄。" });
+    }
+  }
+
+  function confirmImport(mode: "merge" | "replace") {
+    if (!importPreview) return;
+    try {
+      const before = currentSnapshot();
+      // Abort before changing React state if the recovery copy cannot be saved.
+      localStorage.setItem(UNDO_KEY, JSON.stringify({ format: "vocabflow-progress", version: 1, progress: before }));
+      const next = mode === "merge" ? mergeProgress(before, importPreview.progress) : importPreview.progress;
+      persistProgress(localStorage, next);
+      applySnapshot(next);
+      setCanUndo(true);
+      setImportPreview(null);
+      setBackupFeedback({ type: "success", text: "匯入完成。匯入前的紀錄已保留，可按「復原上次匯入」。" });
+    } catch (error) {
+      setBackupFeedback({ type: "error", text: error instanceof Error ? error.message : "無法保存復原備份，匯入已取消；請先匯出紀錄並確認裝置可用空間。" });
+    }
+  }
+
+  function undoImport() {
+    try {
+      const raw = localStorage.getItem(UNDO_KEY);
+      if (!raw) throw new Error("沒有可復原的匯入紀錄。");
+      const previous = parseProgressBackup(JSON.parse(raw), new Set(words.map(word => word.id)), totalDays);
+      // Swap snapshots so a mistaken undo is also recoverable.
+      localStorage.setItem(UNDO_KEY, JSON.stringify({ format: "vocabflow-progress", version: 1, progress: currentSnapshot() }));
+      persistProgress(localStorage, previous.progress);
+      applySnapshot(previous.progress);
+      setBackupFeedback({ type: "success", text: "已復原。再次按復原可切回剛才的紀錄。" });
+    } catch (error) {
+      setBackupFeedback({ type: "error", text: error instanceof Error ? error.message : "復原失敗，紀錄未變更。" });
     }
   }
 
@@ -418,6 +443,7 @@ export default function Home() {
 
   return (
     <main className="app-shell">
+      {storageError && <p className="storage-error" role="alert">{storageError}</p>}
       <header className="topbar">
         <a className="brand" href="#top" aria-label="回到今日單字頂端">
           <span className="brand-mark">V</span>
@@ -521,7 +547,7 @@ export default function Home() {
                           {group.sourceField && <small>[{group.sourceField}]</small>}
                         </div>
                         <p className="meaning-senses">
-                          {group.senses.map((sense, index) => <span key={`${sense}-${index}`}>{index > 0 && "、"}{sense}</span>)}
+                          {group.senses.map((sense, index) => <span key={`${sense}-${index}`}>{index > 0 && "、"}{!group.sourceField && isPrimaryMeaning(word.id, word.word, group.abbreviation, sense) ? <strong className="primary-meaning" title="主要意思：依詞性與學習字典用法選定">{sense}</strong> : sense}</span>)}
                         </p>
                         {group.supplements.map((supplement) => (
                           <p className="meaning-supplement" key={`${supplement.field}-${supplement.senses.join("-")}`}>
@@ -622,6 +648,18 @@ export default function Home() {
                 <button type="button" className="backup-button import" onClick={() => importInputRef.current?.click()}>↑ 匯入進度</button>
                 <input ref={importInputRef} className="hidden-file-input" type="file" accept=".json,application/json" onChange={importProgress} />
               </div>
+              {importPreview && <div className="backup-preview" role="region" aria-label="匯入預覽">
+                <strong>匯入預覽</strong>
+                <p>備份時間：{importPreview.exportedAt ? new Date(importPreview.exportedAt).toLocaleString("zh-TW") : "未提供"}</p>
+                <p>{Object.keys(importPreview.progress.statuses).length} 個標記 · {Object.keys(importPreview.progress.notes).length} 則筆記 · {importPreview.progress.quizHistory.length} 次測驗 · {Object.keys(importPreview.progress.reviews).length} 個複習排程</p>
+                <p>合併：相同單字的標記、筆記與排程保留本機版本，設定不變。取代：使用備份中的全部紀錄與設定。兩者皆可復原。</p>
+                <div className="backup-actions">
+                  <button className="backup-button" onClick={() => confirmImport("merge")}>合併紀錄</button>
+                  <button className="backup-button" onClick={() => confirmImport("replace")}>取代紀錄</button>
+                  <button className="backup-button" onClick={() => setImportPreview(null)}>取消匯入</button>
+                </div>
+              </div>}
+              {canUndo && <button className="backup-button" onClick={undoImport}>復原上次匯入</button>}
               {backupFeedback && <p className={`backup-feedback ${backupFeedback.type}`} role="status">{backupFeedback.text}</p>}
             </section>
             <button className="primary-button full" onClick={() => setSettingsOpen(false)}>儲存並返回學習</button>
@@ -651,7 +689,8 @@ export default function Home() {
           totalDays={totalDays}
           statuses={statuses}
           history={quizHistory}
-          onComplete={(entry) => setQuizHistory((current) => [entry, ...current].slice(0, 50))}
+          reviewIds={dueReviewIds(reviewRecords)}
+          onComplete={completeQuiz}
           onClose={() => setQuizOpen(false)}
         />
       )}

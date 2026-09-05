@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { isChineseMeaningCorrect, isFillAnswerCorrect } from "./quizAnswers";
+import { isChineseMeaningCorrect, isFillAnswerCorrect, fillAnswerFeedback } from "./quizAnswers";
 
 export type QuizWord = {
   id: number;
@@ -22,6 +22,8 @@ export type QuizHistoryEntry = {
   total: number;
   correct: number;
   wrongWordIds: number[];
+  testedWordIds?: number[];
+  scope?: "today" | "custom" | "review" | "mistakes" | "retry";
   questionType?: QuizQuestionType;
   directionMode?: QuizDirectionMode;
   statusFilters?: QuizWordStatus[];
@@ -42,6 +44,7 @@ type Props = {
   totalDays: number;
   statuses: Record<number, QuizWordStatus>;
   history: QuizHistoryEntry[];
+  reviewIds?: number[];
   onComplete: (entry: QuizHistoryEntry) => void;
   onClose: () => void;
 };
@@ -149,8 +152,15 @@ function formatHistoryDate(value: string) {
   }).format(new Date(value));
 }
 
-export default function QuizModal({ words, currentDay, totalDays, statuses, history, onComplete, onClose }: Props) {
-  const [rangeMode, setRangeMode] = useState<"today" | "custom">("today");
+function historyScope(entry: QuizHistoryEntry) {
+  if (entry.scope === "review") return "到期複習";
+  if (entry.scope === "mistakes") return "歷次錯題";
+  if (entry.scope === "retry") return "本次錯題重練";
+  return `Day ${entry.startDay}${entry.endDay !== entry.startDay ? `–${entry.endDay}` : ""}`;
+}
+
+export default function QuizModal({ words, currentDay, totalDays, statuses, history, reviewIds = [], onComplete, onClose }: Props) {
+  const [rangeMode, setRangeMode] = useState<"today" | "custom" | "review" | "mistakes">("today");
   const [questionType, setQuestionType] = useState<QuizQuestionType>("choice");
   const [directionMode, setDirectionMode] = useState<QuizDirectionMode>("random");
   const [statusFilters, setStatusFilters] = useState<QuizWordStatus[]>([]);
@@ -166,16 +176,25 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
   const [timerEnabled, setTimerEnabled] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(30);
   const [remainingSeconds, setRemainingSeconds] = useState(30);
+  const [activeScope, setActiveScope] = useState<QuizHistoryEntry["scope"]>("today");
 
   const effectiveStart = rangeMode === "today" ? currentDay : Math.min(startDay, endDay);
   const effectiveEnd = rangeMode === "today" ? currentDay : Math.max(startDay, endDay);
   const scope = useMemo(() => {
     const start = (effectiveStart - 1) * WORDS_PER_DAY;
-    const rangeWords = words.slice(start, effectiveEnd * WORDS_PER_DAY);
+    const unresolved = new Set<number>();
+    const resolved = new Set<number>();
+    for (const entry of [...history].sort((a, b) => Date.parse(b.completedAt) - Date.parse(a.completedAt))) {
+      for (const id of entry.wrongWordIds) if (!resolved.has(id)) unresolved.add(id);
+      for (const id of entry.testedWordIds ?? entry.wrongWordIds) resolved.add(id);
+    }
+    const rangeWords = rangeMode === "review" ? reviewIds.map(id => words.find(w => w.id === id)).filter((w): w is QuizWord => Boolean(w))
+      : rangeMode === "mistakes" ? words.filter(w => unresolved.has(w.id))
+      : words.slice(start, effectiveEnd * WORDS_PER_DAY);
     return statusFilters.length
       ? rangeWords.filter((word) => statusFilters.includes(statuses[word.id]))
       : rangeWords;
-  }, [effectiveStart, effectiveEnd, statusFilters, statuses, words]);
+  }, [effectiveStart, effectiveEnd, statusFilters, statuses, words, rangeMode, history, reviewIds]);
   const current = questions[questionIndex];
   const currentAnswerCorrect = Boolean(current && selected && selected !== TIMEOUT_VALUE && (
     questionType === "fill"
@@ -199,8 +218,9 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
     return () => window.clearTimeout(timer);
   }, [current, timerEnabled, selected, finished, remainingSeconds]);
 
-  function startQuiz() {
-    const nextQuestions = makeQuestions(scope, words, directionMode, questionType);
+  function startQuiz(selectedWords = scope, retry = false) {
+    setActiveScope(retry ? "retry" : rangeMode);
+    const nextQuestions = makeQuestions(selectedWords, words, directionMode, questionType);
     setQuestions(nextQuestions);
     setQuestionIndex(0);
     setSelected(null);
@@ -252,6 +272,8 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
       total: questions.length,
       correct: correctCount,
       wrongWordIds,
+      testedWordIds: questions.map(question => question.word.id),
+      scope: activeScope,
       questionType,
       directionMode,
       statusFilters,
@@ -293,6 +315,8 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
             <div className="quiz-mode-tabs" role="group" aria-label="選擇測驗範圍">
               <button className={rangeMode === "today" ? "active" : ""} onClick={() => setRangeMode("today")}>當日 50 詞</button>
               <button className={rangeMode === "custom" ? "active" : ""} onClick={() => setRangeMode("custom")}>自訂天數</button>
+              <button className={rangeMode === "review" ? "active" : ""} onClick={() => setRangeMode("review")}>到期複習（{reviewIds.length}）</button>
+              <button className={rangeMode === "mistakes" ? "active" : ""} onClick={() => setRangeMode("mistakes")}>歷次錯題</button>
             </div>
             {rangeMode === "custom" && (
               <div className="quiz-range">
@@ -348,16 +372,16 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
               <small>時間到會顯示正確答案，由你按「下一題」。</small>
             </div>
             <div className="quiz-summary">
-              <strong>Day {effectiveStart}{effectiveEnd !== effectiveStart ? `–${effectiveEnd}` : ""}</strong>
+              <strong>{rangeMode === "review" ? "到期複習" : rangeMode === "mistakes" ? "尚未答對的歷次錯題" : `Day ${effectiveStart}${effectiveEnd !== effectiveStart ? `–${effectiveEnd}` : ""}`}</strong>
               <span>{scope.length} 題 · {questionType === "fill" ? `${fillDirectionModeLabels[directionMode]} · 填充題` : `${directionModeLabels[directionMode]}四選一`}{timerEnabled ? ` · 每題 ${timerSeconds} 秒` : ""}</span>
             </div>
-            <button className="primary-button full" onClick={startQuiz} disabled={!scope.length}>開始測驗</button>
+            <button className="primary-button full" onClick={() => startQuiz()} disabled={!scope.length}>開始測驗</button>
 
             <div className="quiz-history">
               <h3>最近測驗</h3>
               {history.slice(0, 5).map((entry) => (
                 <div key={entry.id}>
-                  <span>{formatHistoryDate(entry.completedAt)} · Day {entry.startDay}{entry.endDay !== entry.startDay ? `–${entry.endDay}` : ""}{entry.questionType === "fill" ? ` · ${entry.directionMode ? fillDirectionModeLabels[entry.directionMode] : "填充題"}` : entry.directionMode ? ` · ${directionModeLabels[entry.directionMode]}` : ""}{entry.statusFilters?.length ? ` · ${entry.statusFilters.map((status) => statusLabels[status]).join("＋")}` : ""}{entry.timerSeconds ? ` · ${entry.timerSeconds} 秒` : ""}</span>
+                  <span>{formatHistoryDate(entry.completedAt)} · {historyScope(entry)}{entry.questionType === "fill" ? ` · ${entry.directionMode ? fillDirectionModeLabels[entry.directionMode] : "填充題"}` : entry.directionMode ? ` · ${directionModeLabels[entry.directionMode]}` : ""}{entry.statusFilters?.length ? ` · ${entry.statusFilters.map((status) => statusLabels[status]).join("＋")}` : ""}{entry.timerSeconds ? ` · ${entry.timerSeconds} 秒` : ""}</span>
                   <strong>{entry.correct} / {entry.total}</strong>
                 </div>
               ))}
@@ -408,6 +432,7 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
               <div className={`quiz-feedback ${currentAnswerCorrect ? "correct" : "wrong"}`}>
                 <strong>{currentAnswerCorrect ? "答對了" : selected === TIMEOUT_VALUE ? "時間到" : "答錯了"}</strong>
                 {!currentAnswerCorrect && <span>正確答案：{current.answer}</span>}
+                {!currentAnswerCorrect && questionType === "fill" && selected !== TIMEOUT_VALUE && <span>{fillAnswerFeedback(selected, current.word.word, current.direction)}</span>}
               </div>
             )}
             <button className="primary-button full quiz-next" onClick={nextQuestion} disabled={!selected}>
@@ -429,6 +454,7 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
               </div>
             )}
             <div className="quiz-result-actions">
+              {wrongWords.length > 0 && <button className="quiet-button quiz-secondary-button" onClick={() => startQuiz(wrongWords, true)}>只重練本次錯題（{wrongWords.length}）</button>}
               <button className="quiet-button quiz-secondary-button" onClick={resetQuiz}>再測一次</button>
               <button className="primary-button" onClick={onClose}>返回單字</button>
             </div>

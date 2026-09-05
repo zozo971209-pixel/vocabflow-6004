@@ -22,7 +22,7 @@ MECHANICAL_RE = re.compile(
 )
 SAFE_OVERRIDES = {
     "1": {"a book", "an apple"},
-    "188": {"i am ready"},
+    "188": {"at 8 a.m."},
     "3996": {"at 3 p.m."},
 }
 

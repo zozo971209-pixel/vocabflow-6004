@@ -93,14 +93,15 @@ for (const item of vocab) {
 
   if (found) {
     matchedWords += 1;
-    const posEntries = Object.values(found.entry);
+    const allowedPos = new Set((item.pos.match(/[a-z]+/g) ?? []).map((pos) => ({ adj: "a", adv: "r", vt: "v", vi: "v" }[pos] ?? pos)));
+    const posEntries = Object.entries(found.entry).filter(([pos]) => allowedPos.has(pos) || (pos === "s" && allowedPos.has("a"))).map(([, entry]) => entry);
     nounForms = found.entry.n?.form ?? [];
     const senses = posEntries.flatMap((posEntry) => posEntry.sense ?? []);
     const relatedSynsets = senses.map((sense) => synsets[sense.synset]).filter(Boolean);
-    const examples = unique(senses.flatMap((sense) => sense.sent ?? []).concat(relatedSynsets.flatMap((synset) => synset.example ?? []))
+    const examples = unique(relatedSynsets.flatMap((synset) => synset.example ?? []).map(example => typeof example === "string" ? example : example.text ?? "")
       .filter((example) => exampleUsesTarget(example, [...targetForms, ...posEntries.flatMap((posEntry) => posEntry.form ?? [])])), 3);
     const synonyms = unique(relatedSynsets.flatMap((synset) => synset.members ?? []).filter((member) => !targetForms.some((target) => normalize(member) === normalize(target))), 8);
-    const phrases = unique(relatedSynsets.flatMap((synset) => synset.members ?? []).filter((member) => /[_ -]/.test(member) && member.split(/[_ -]/).length > 1), 6);
+    const phrases = unique(relatedSynsets.flatMap((synset) => synset.members ?? []).filter((member) => /[_ -]/.test(member) && member.split(/[_ -]/).length > 1 && exampleUsesTarget(member, targetForms)), 6);
     const forms = unique(posEntries.flatMap((posEntry) => posEntry.form ?? []).filter((form) => !targetForms.some((target) => normalize(form) === normalize(target))), 8);
     const family = unique(senses.flatMap((sense) => sense.derivation ?? []).map(lemmaFromSenseId).filter((lemma) => !targetForms.some((target) => normalize(lemma) === normalize(target))), 8);
     const antonyms = unique(senses.flatMap((sense) => sense.antonym ?? []).map(lemmaFromSenseId), 8);

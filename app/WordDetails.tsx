@@ -4,6 +4,7 @@ import { irregularFormFor } from "./wordEnhancements";
 import { EnrichmentCategory, VerifiedEnrichmentRecord } from "./enrichment";
 import { AiEnrichmentPayload, AiEnrichmentWord } from "./aiEnrichment";
 import { BilingualExample } from "./bilingualExamples";
+import { contentEditorial, editedEnrichment, editedExamples } from "./contentEditorial";
 
 type Props = {
   wordId: number;
@@ -39,11 +40,11 @@ function glossKey(value: string) {
   return value.toLowerCase().replaceAll("_", " ").replace(/\s+/g, " ").trim();
 }
 
-function AiList({ items, emptyText, glosses }: { items?: string[]; emptyText: string; glosses?: Record<string, string> }) {
+function AiList({ items, emptyText, glosses, notes }: { items?: string[]; emptyText: string; glosses?: (key: string) => string | undefined; notes?: Record<string, string> }) {
   if (!items?.length) return <p className="detail-empty">{emptyText}</p>;
   return <ul className="ai-detail-list">{items.map((item) => {
-    const gloss = glosses?.[glossKey(item)];
-    return <li key={item}><span>{item}</span>{gloss ? <small>— {gloss}</small> : null}</li>;
+    const gloss = glosses?.(glossKey(item));
+    return <li key={item}><span>{item}</span>{gloss ? <small>— {gloss}</small> : null}{notes?.[item] && <small className="synonym-distinction">用法差異：{notes[item]}</small>}</li>;
   })}</ul>;
 }
 
@@ -56,11 +57,14 @@ function HighlightedText({ text, start, end }: { text: string; start: number; en
   return <>{text.slice(0, start)}<strong className="example-target">{text.slice(start, end)}</strong>{text.slice(end)}</>;
 }
 
-export default function WordDetails({ wordId, word, family, records, aiData, aiMeta, aiGlosses, examples, personalNote, onNoteChange }: Props) {
+export default function WordDetails({ wordId, word, family, records, aiData: originalAiData, aiMeta, aiGlosses: originalGlosses, examples: originalExamples, personalNote, onNoteChange }: Props) {
+  const aiData = editedEnrichment(wordId, originalAiData);
+  const examples = editedExamples(wordId) ?? originalExamples;
+  const aiGlosses = (key: string) => aiData?.glosses?.[key] ?? originalGlosses[key];
   const irregular = irregularFormFor(word);
   const verifiedFamily = records.filter((record) => record.category === "word_family");
   const verifiedIrregular = records.filter((record) => record.category === "irregular_form");
-  const combinedFamily = [...new Set([...(aiData?.family ?? []), ...family])].filter((item) => item.toLowerCase() !== word.toLowerCase());
+  const combinedFamily = [...new Set([...(aiData?.family ?? []), ...(contentEditorial[wordId] ? [] : family)])].filter((item) => item.toLowerCase() !== word.toLowerCase());
   const combinedForms = [...new Set([...(irregular ? [irregular] : []), ...(aiData?.forms ?? [])])];
 
   return (
@@ -80,12 +84,17 @@ export default function WordDetails({ wordId, word, family, records, aiData, aiM
         <section>
           <h4>搭配詞與句型練習</h4>
           <VerifiedItems records={verifiedFor(records, ["collocation"])} />
-          <AiList items={aiData?.collocations} emptyText="目前沒有可用的搭配資料。" glosses={aiGlosses} />
+          <p className="detail-label">搭配詞</p>
+          <AiList items={aiData?.collocations} emptyText="目前沒有可用的短搭配詞。" glosses={aiGlosses} />
+          {aiData?.sentencePatterns?.length ? <>
+            <p className="detail-label">句型練習</p>
+            <AiList items={aiData.sentencePatterns} emptyText="目前沒有可用的句型練習。" glosses={aiGlosses} />
+          </> : null}
         </section>
         <section>
-          <h4>片語與固定用法</h4>
+          <h4>片語、複合詞與固定用法</h4>
           <VerifiedItems records={verifiedFor(records, ["fixed_phrase"])} />
-          <AiList items={aiData?.phrases} emptyText="詞典未列出固定片語；不代表此詞沒有其他語境搭配。" />
+          <AiList items={aiData?.phrases} emptyText="未收錄可直接對應的固定片語；不代表此詞沒有其他搭配。" glosses={aiGlosses} />
         </section>
         <section>
           <h4>例句與造句提示</h4>
@@ -102,9 +111,10 @@ export default function WordDetails({ wordId, word, family, records, aiData, aiM
           <h4>同義詞與反義詞</h4>
           <VerifiedItems records={verifiedFor(records, ["synonym", "antonym"])} />
           <p className="detail-label">同義詞</p>
-          <AiList items={aiData?.synonyms} emptyText="詞典未列出可直接替換的同義詞。" glosses={aiGlosses} />
+          <AiList items={aiData?.synonyms} emptyText="未收錄可直接對應的同義詞。" glosses={aiGlosses} notes={aiData?.synonymNotes} />
+          {Boolean(aiData?.synonyms.length) && !aiData?.synonymNotes && <p className="detail-empty">這些詞只在部分詞義下相近，不保證能在每個句子互換；逐詞用法差異尚待整理。</p>}
           <p className="detail-label">反義詞</p>
-          <AiList items={aiData?.antonyms} emptyText="詞典未列出直接反義詞。" />
+          <AiList items={aiData?.antonyms} emptyText="未收錄直接反義詞。" glosses={aiGlosses} />
         </section>
         <section>
           <h4>用法標記（可數／不可數）</h4>

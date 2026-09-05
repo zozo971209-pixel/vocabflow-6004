@@ -5,11 +5,14 @@ export type AiEnrichmentWord = {
   family: string[];
   forms: string[];
   collocations: string[];
+  sentencePatterns?: string[];
   phrases: string[];
   examples: AiExample[];
   synonyms: string[];
   antonyms: string[];
   usage: string[];
+  glosses?: Record<string, string>;
+  synonymNotes?: Record<string, string>;
 };
 
 export type AiEnrichmentPayload = {
