@@ -39,7 +39,6 @@ interface BeforeInstallPromptEvent extends Event {
 declare global {
   interface Window {
     __vocabflowInstallPrompt: BeforeInstallPromptEvent | null;
-    __vocabflowInstalled: boolean;
   }
 }
 
@@ -165,7 +164,6 @@ export default function Home() {
   const [aiEnrichmentMeta, setAiEnrichmentMeta] = useState<Pick<AiEnrichmentPayload, "notice" | "source"> | null>(null);
   const [bilingualExamples, setBilingualExamples] = useState<Record<string, BilingualExample[]>>({});
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(() => typeof window === "undefined" ? null : window.__vocabflowInstallPrompt);
-  const [pwaInstalled, setPwaInstalled] = useState(() => typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone) || window.__vocabflowInstalled));
   const [pwaFeedback, setPwaFeedback] = useState<PwaFeedback>(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | WordStatus | "unmarked">("all");
@@ -259,7 +257,7 @@ export default function Home() {
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=15`, { scope: `${BASE_PATH}/`, updateViaCache: "none" })
+      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=16`, { scope: `${BASE_PATH}/`, updateViaCache: "none" })
         .then((registration) => { registration.update().catch(() => undefined); })
         .catch(() => {
           setPwaFeedback({ type: "error", text: "離線功能註冊失敗，請確認網路後重新整理。現有進度不受影響。" });
@@ -273,7 +271,6 @@ export default function Home() {
     };
     const handleInstalled = () => {
       setInstallPrompt(null);
-      setPwaInstalled(true);
       setPwaFeedback({ type: "success", text: "安裝完成。之後可直接從桌面開啟。" });
     };
     const syncFrame = requestAnimationFrame(syncInstallPrompt);
@@ -380,10 +377,6 @@ export default function Home() {
   }
 
   async function installPwa() {
-    if (pwaInstalled || window.matchMedia("(display-mode: standalone)").matches) {
-      setPwaFeedback({ type: "success", text: "這個裝置目前已用 App 模式開啟，不需要重複安裝。" });
-      return;
-    }
     const prompt = installPrompt ?? window.__vocabflowInstallPrompt;
     if (!prompt) {
       const userAgent = navigator.userAgent.toLowerCase();
@@ -727,7 +720,7 @@ export default function Home() {
             </section>
             <section className="setting-section pwa-panel" aria-labelledby="pwa-title">
               <div><strong id="pwa-title">安裝與完整離線使用</strong><p>先在線上開啟一次，網站與 6,004 詞資料會快取至裝置；之後無網路仍可學習、測驗與寫筆記。</p></div>
-              <button type="button" className="backup-button export" onClick={installPwa}>{pwaInstalled ? "✓ 已安裝至裝置" : "＋ 安裝到裝置"}</button>
+              <button type="button" className="backup-button export" onClick={installPwa}>＋ 安裝到裝置</button>
               {pwaFeedback && <p className={`backup-feedback ${pwaFeedback.type}`} role="status">{pwaFeedback.text}</p>}
             </section>
             <section className="backup-panel" aria-labelledby="backup-title">

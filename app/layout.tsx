@@ -10,13 +10,13 @@ export const metadata: Metadata = (() => {
     title,
     description,
     manifest: "/vocabflow-6004/manifest.webmanifest",
-    icons: { icon: "/vocabflow-6004/favicon.svg", shortcut: "/vocabflow-6004/favicon.svg", apple: "/vocabflow-6004/icon-v-192.png" },
+    icons: { icon: "/vocabflow-6004/favicon.svg", shortcut: "/vocabflow-6004/favicon.svg", apple: "/vocabflow-6004/icon-v2-192.png" },
     openGraph: { title, description, images: [{ url: "/vocabflow-6004/og.png", width: 1536, height: 1024, alt: "詞序 VocabFlow 高中英文每日學習" }] },
     twitter: { card: "summary_large_image", title, description, images: ["/vocabflow-6004/og.png"] },
   };
 })();
 
-const installCaptureScript = `window.__vocabflowInstallPrompt=null;window.__vocabflowInstalled=false;window.addEventListener('beforeinstallprompt',function(event){event.preventDefault();window.__vocabflowInstallPrompt=event;window.dispatchEvent(new Event('vocabflow-install-ready'))});window.addEventListener('appinstalled',function(){window.__vocabflowInstallPrompt=null;window.__vocabflowInstalled=true;window.dispatchEvent(new Event('vocabflow-installed'))});`;
+const installCaptureScript = `window.__vocabflowInstallPrompt=null;window.addEventListener('beforeinstallprompt',function(event){event.preventDefault();window.__vocabflowInstallPrompt=event;window.dispatchEvent(new Event('vocabflow-install-ready'))});window.addEventListener('appinstalled',function(){window.__vocabflowInstallPrompt=null;window.dispatchEvent(new Event('vocabflow-installed'))});`;
 
 export const viewport: Viewport = {
   themeColor: [
