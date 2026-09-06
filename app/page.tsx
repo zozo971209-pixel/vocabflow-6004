@@ -250,7 +250,7 @@ export default function Home() {
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=12`, { scope: `${BASE_PATH}/`, updateViaCache: "none" }).catch(() => {
+      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=13`, { scope: `${BASE_PATH}/`, updateViaCache: "none" }).catch(() => {
         setPwaFeedback("離線功能註冊失敗，請重新整理後再試。");
       });
     }
@@ -469,7 +469,7 @@ export default function Home() {
         </a>
         <div className="top-actions">
           <button className="primary-button" onClick={() => setQuizOpen(true)}>✦ 單字測驗</button>
-          <button className="quiet-button" onClick={() => setSettingsOpen(true)}>⚙ 學習設定</button>
+          <button className="primary-button top-settings-button" onClick={() => setSettingsOpen(true)} aria-label="學習設定">⚙ 設定</button>
         </div>
       </header>
 
