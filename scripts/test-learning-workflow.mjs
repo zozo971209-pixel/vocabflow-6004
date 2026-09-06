@@ -9,6 +9,7 @@ const { scheduleReview, dueReviewIds } = await load("app/reviewSchedule.ts");
 const { parseProgressBackup, mergeProgress } = await load("app/progressBackup.ts");
 const { persistProgress } = await load("app/progressStorage.ts");
 const { isChineseMeaningCorrect, isFillAnswerCorrect, fillAnswerFeedback } = await load("app/quizAnswers.ts");
+const { loadQuizPreferences, saveQuizPreferences, QUIZ_PREFERENCES_KEY } = await load("app/quizPreferences.ts");
 const now = new Date(2026, 0, 31, 12);
 const first = scheduleReview(undefined, true, now);
 assert.equal(first.due, "2026-02-01");
@@ -64,4 +65,18 @@ assert.throws(() => persistProgress(fakeStorage, { ...incoming, settings: { ...i
 assert.deepEqual([...saved], beforeFailure, "A partial write must restore every previous value");
 persistProgress(fakeStorage, incoming);
 assert.equal(JSON.parse(saved.get("vocab6004-progress-v1"))[2], "review");
-console.log("PASS: review dates, wrong-answer reset, tolerant precise grading, backup validation, merge conflicts and legacy imports");
+const quizPreferences = {
+  rangeMode: "custom",
+  questionType: "fill",
+  directionMode: "en-to-zh",
+  statusFilters: ["review", "unknown"],
+  startDay: 20,
+  endDay: 23,
+  timerEnabled: true,
+  timerSeconds: 45,
+};
+saveQuizPreferences(fakeStorage, quizPreferences);
+assert.deepEqual(loadQuizPreferences(fakeStorage, 1, 121), { preferences: quizPreferences, restored: true });
+saved.set(QUIZ_PREFERENCES_KEY, JSON.stringify({ ...quizPreferences, startDay: -5, endDay: 999, timerSeconds: 2, statusFilters: ["review", "invalid", "review"] }));
+assert.deepEqual(loadQuizPreferences(fakeStorage, 1, 121).preferences, { ...quizPreferences, startDay: 1, endDay: 121, timerSeconds: 5, statusFilters: ["review"] });
+console.log("PASS: review dates, grading, backup safety, and persistent validated quiz preferences");

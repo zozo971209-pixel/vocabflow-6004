@@ -38,6 +38,7 @@ interface BeforeInstallPromptEvent extends Event {
 const STORAGE_KEY = "vocab6004-progress-v1";
 const SETTINGS_KEY = "vocab6004-settings-v1";
 const QUIZ_HISTORY_KEY = "vocab6004-quiz-history-v1";
+const SEARCH_PAGE_SIZE = 200;
 const NOTES_KEY = "vocab6004-notes-v1";
 const REVIEW_KEY = "vocab6004-review-v1";
 const UNDO_KEY = "vocab6004-import-undo-v1";
@@ -160,8 +161,10 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | WordStatus | "unmarked">("all");
   const [levelFilter, setLevelFilter] = useState(0);
-  // 0 follows the currently selected learning day; -1 searches every day.
-  const [searchDayFilter, setSearchDayFilter] = useState(0);
+  const [searchDayMode, setSearchDayMode] = useState<"today" | "all" | "range">("today");
+  const [searchStartDay, setSearchStartDay] = useState(1);
+  const [searchEndDay, setSearchEndDay] = useState(1);
+  const [visibleResultCount, setVisibleResultCount] = useState(SEARCH_PAGE_SIZE);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
@@ -247,7 +250,7 @@ export default function Home() {
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=10`, { scope: `${BASE_PATH}/`, updateViaCache: "none" }).catch(() => {
+      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=11`, { scope: `${BASE_PATH}/`, updateViaCache: "none" }).catch(() => {
         setPwaFeedback("離線功能註冊失敗，請重新整理後再試。");
       });
     }
@@ -281,13 +284,15 @@ export default function Home() {
     return words.slice(start, start + WORDS_PER_DAY);
   }, [words, safeDay]);
 
-  const filteredWords = useMemo(() => {
+  const safeSearchStart = Math.max(1, Math.min(totalDays, Math.min(searchStartDay, searchEndDay)));
+  const safeSearchEnd = Math.max(1, Math.min(totalDays, Math.max(searchStartDay, searchEndDay)));
+  const filteredMatches = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    const source = searchDayFilter === -1
+    const source = searchDayMode === "all"
       ? words
-      : searchDayFilter === 0
+      : searchDayMode === "today"
         ? dayWords
-        : words.slice((searchDayFilter - 1) * WORDS_PER_DAY, searchDayFilter * WORDS_PER_DAY);
+        : words.slice((safeSearchStart - 1) * WORDS_PER_DAY, safeSearchEnd * WORDS_PER_DAY);
     return source.filter((word) => {
       const matchesQuery = !normalized || word.word.toLowerCase().includes(normalized) ||
         word.meaning.toLowerCase().includes(normalized);
@@ -295,8 +300,15 @@ export default function Home() {
         (statusFilter === "unmarked" ? !statuses[word.id] : statuses[word.id] === statusFilter);
       const matchesLevel = levelFilter === 0 || word.level === levelFilter;
       return matchesQuery && matchesStatus && matchesLevel;
-    }).slice(0, normalized || searchDayFilter === -1 ? 120 : WORDS_PER_DAY);
-  }, [query, words, dayWords, searchDayFilter, statusFilter, levelFilter, statuses]);
+    });
+  }, [query, words, dayWords, searchDayMode, safeSearchStart, safeSearchEnd, statusFilter, levelFilter, statuses]);
+  const filteredWords = filteredMatches.slice(0, visibleResultCount);
+  const isFilteredView = Boolean(query) || searchDayMode !== "today" || statusFilter !== "all" || levelFilter !== 0;
+  const searchScopeLabel = searchDayMode === "all"
+    ? "全部天數"
+    : searchDayMode === "range"
+      ? `第 ${safeSearchStart}${safeSearchEnd === safeSearchStart ? "" : `–${safeSearchEnd}`} 天`
+      : `第 ${safeDay} 天`;
 
   const allCounts = useMemo(() => ({
     known: Object.values(statuses).filter((s) => s === "known").length,
@@ -507,19 +519,27 @@ export default function Home() {
         <section className="toolbar" role="search" aria-label="搜尋與篩選單字">
           <label className="search-box">
             <span>⌕</span>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜尋目前範圍（英文或中文）" />
-            {query && <button onClick={() => setQuery("")} aria-label="清除搜尋">×</button>}
+            <input value={query} onChange={(event) => { setQuery(event.target.value); setVisibleResultCount(SEARCH_PAGE_SIZE); }} placeholder="搜尋目前範圍（英文或中文）" />
+            {query && <button onClick={() => { setQuery(""); setVisibleResultCount(SEARCH_PAGE_SIZE); }} aria-label="清除搜尋">×</button>}
           </label>
-          <label className="filter-field"><span>天數</span><select value={searchDayFilter} onChange={(e) => setSearchDayFilter(Number(e.target.value))} aria-label="依學習天數篩選">
-              <option value={0}>當日（Day {safeDay}）</option>
-              <option value={-1}>全部天數</option>
-              {Array.from({ length: totalDays }, (_, index) => index + 1).map((day) => <option key={day} value={day}>第 {day} 天</option>)}
+          <label className="filter-field"><span>天數範圍</span><select value={searchDayMode} onChange={(e) => {
+              const mode = e.target.value as typeof searchDayMode;
+              setSearchDayMode(mode);
+              setVisibleResultCount(SEARCH_PAGE_SIZE);
+              if (mode === "range" && searchStartDay === 1 && searchEndDay === 1) {
+                setSearchStartDay(safeDay);
+                setSearchEndDay(safeDay);
+              }
+            }} aria-label="選擇搜尋天數範圍">
+              <option value="today">今天（Day {safeDay}）</option>
+              <option value="all">全部天數</option>
+              <option value="range">自訂 Day 範圍</option>
             </select></label>
-          <label className="filter-field"><span>級別</span><select value={levelFilter} onChange={(e) => setLevelFilter(Number(e.target.value))} aria-label="依官方級別篩選">
+          <label className="filter-field"><span>級別</span><select value={levelFilter} onChange={(e) => { setLevelFilter(Number(e.target.value)); setVisibleResultCount(SEARCH_PAGE_SIZE); }} aria-label="依官方級別篩選">
               <option value={0}>全部級別</option>
               {[1,2,3,4,5,6].map((level) => <option key={level} value={level}>第 {level} 級</option>)}
             </select></label>
-          <label className="filter-field"><span>熟悉度</span><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)} aria-label="依學習狀態篩選">
+          <label className="filter-field"><span>熟悉度</span><select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value as typeof statusFilter); setVisibleResultCount(SEARCH_PAGE_SIZE); }} aria-label="依學習狀態篩選">
               <option value="all">全部狀態</option>
               <option value="known">已熟悉</option>
               <option value="review">待複習</option>
@@ -529,10 +549,19 @@ export default function Home() {
           <button className="speech-mode" onClick={() => setSpeechSpeed(nextSpeechSpeed)} aria-label="切換朗讀速度">
             <span>▶</span>朗讀：{speechSpeed === "ultraSlow" ? "超慢速" : speechSpeed === "slow" ? "慢速" : "正常"}
           </button>
+          {searchDayMode === "range" && (
+            <div className="search-day-range" role="group" aria-label="自訂搜尋天數範圍">
+              <strong>自訂範圍</strong>
+              <label><span>從 Day</span><input type="number" min="1" max={totalDays} value={searchStartDay} onChange={(e) => { setSearchStartDay(Math.max(1, Math.min(totalDays, Number(e.target.value) || 1))); setVisibleResultCount(SEARCH_PAGE_SIZE); }} /></label>
+              <span aria-hidden="true">到</span>
+              <label><span>到 Day</span><input type="number" min="1" max={totalDays} value={searchEndDay} onChange={(e) => { setSearchEndDay(Math.max(1, Math.min(totalDays, Number(e.target.value) || 1))); setVisibleResultCount(SEARCH_PAGE_SIZE); }} /></label>
+              <small>可自由輸入 1–{totalDays}，例如 Day 20 到 Day 23。</small>
+            </div>
+          )}
         </section>
 
         <div className="list-heading">
-          <div><p>{query || searchDayFilter !== 0 ? (searchDayFilter === -1 ? "全部天數搜尋結果" : `第 ${searchDayFilter === 0 ? safeDay : searchDayFilter} 天搜尋結果`) : `DAY ${safeDay} · TODAY'S WORDS`}</p><h2>{query || searchDayFilter !== 0 ? `找到 ${filteredWords.length}${filteredWords.length === 120 ? "+" : ""} 筆` : "今日單字"}</h2></div>
+          <div><p>{isFilteredView ? `${searchScopeLabel}搜尋結果` : `DAY ${safeDay} · TODAY'S WORDS`}</p><h2>{isFilteredView ? `找到 ${filteredMatches.length} 筆` : "今日單字"}</h2></div>
           <p className="sorting-note">每日六級平均混合 · 固定 50 詞</p>
         </div>
 
@@ -596,7 +625,13 @@ export default function Home() {
           {!filteredWords.length && <div className="empty-state"><span>⌕</span><h3>沒有符合條件的單字</h3><p>試著清除搜尋文字或調整篩選條件。</p></div>}
         </section>
 
-        {!query && (
+        {filteredWords.length < filteredMatches.length && (
+          <button className="load-more-button" onClick={() => setVisibleResultCount((count) => count + SEARCH_PAGE_SIZE)}>
+            顯示更多（目前 {filteredWords.length} / {filteredMatches.length}）
+          </button>
+        )}
+
+        {!query && searchDayMode === "today" && (
           <nav className="bottom-nav" aria-label="前後天切換">
             <button onClick={() => changeDay(safeDay - 1)} disabled={safeDay <= 1}>← 前一天</button>
             <span>Day {safeDay} / {totalDays}</span>

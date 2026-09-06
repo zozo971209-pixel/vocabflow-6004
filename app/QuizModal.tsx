@@ -2,6 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { isChineseMeaningCorrect, isFillAnswerCorrect, fillAnswerFeedback } from "./quizAnswers";
+import {
+  defaultQuizPreferences,
+  loadQuizPreferences,
+  saveQuizPreferences,
+  type QuizPreferences,
+  type SavedQuizDirectionMode,
+  type SavedQuizQuestionType,
+  type SavedQuizWordStatus,
+} from "./quizPreferences";
 
 export type QuizWord = {
   id: number;
@@ -10,9 +19,9 @@ export type QuizWord = {
   meaning: string;
 };
 
-export type QuizDirectionMode = "zh-to-en" | "en-to-zh" | "random";
-export type QuizQuestionType = "choice" | "fill";
-export type QuizWordStatus = "known" | "review" | "unknown";
+export type QuizDirectionMode = SavedQuizDirectionMode;
+export type QuizQuestionType = SavedQuizQuestionType;
+export type QuizWordStatus = SavedQuizWordStatus;
 
 export type QuizHistoryEntry = {
   id: string;
@@ -160,12 +169,15 @@ function historyScope(entry: QuizHistoryEntry) {
 }
 
 export default function QuizModal({ words, currentDay, totalDays, statuses, history, reviewIds = [], onComplete, onClose }: Props) {
-  const [rangeMode, setRangeMode] = useState<"today" | "custom" | "review" | "mistakes">("today");
-  const [questionType, setQuestionType] = useState<QuizQuestionType>("choice");
-  const [directionMode, setDirectionMode] = useState<QuizDirectionMode>("random");
-  const [statusFilters, setStatusFilters] = useState<QuizWordStatus[]>([]);
-  const [startDay, setStartDay] = useState(currentDay);
-  const [endDay, setEndDay] = useState(currentDay);
+  const [initialPreferenceState] = useState(() => typeof window === "undefined"
+    ? { preferences: defaultQuizPreferences(currentDay, totalDays), restored: false }
+    : loadQuizPreferences(window.localStorage, currentDay, totalDays));
+  const [rangeMode, setRangeMode] = useState<QuizPreferences["rangeMode"]>(initialPreferenceState.preferences.rangeMode);
+  const [questionType, setQuestionType] = useState<QuizQuestionType>(initialPreferenceState.preferences.questionType);
+  const [directionMode, setDirectionMode] = useState<QuizDirectionMode>(initialPreferenceState.preferences.directionMode);
+  const [statusFilters, setStatusFilters] = useState<QuizWordStatus[]>(initialPreferenceState.preferences.statusFilters);
+  const [startDay, setStartDay] = useState(initialPreferenceState.preferences.startDay);
+  const [endDay, setEndDay] = useState(initialPreferenceState.preferences.endDay);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
@@ -173,10 +185,11 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
   const [correctCount, setCorrectCount] = useState(0);
   const [wrongWordIds, setWrongWordIds] = useState<number[]>([]);
   const [finished, setFinished] = useState(false);
-  const [timerEnabled, setTimerEnabled] = useState(false);
-  const [timerSeconds, setTimerSeconds] = useState(30);
-  const [remainingSeconds, setRemainingSeconds] = useState(30);
+  const [timerEnabled, setTimerEnabled] = useState(initialPreferenceState.preferences.timerEnabled);
+  const [timerSeconds, setTimerSeconds] = useState(initialPreferenceState.preferences.timerSeconds);
+  const [remainingSeconds, setRemainingSeconds] = useState(initialPreferenceState.preferences.timerSeconds);
   const [activeScope, setActiveScope] = useState<QuizHistoryEntry["scope"]>("today");
+  const [preferenceFeedback, setPreferenceFeedback] = useState<"restored" | "saved" | "error" | null>(initialPreferenceState.restored ? "restored" : null);
 
   const effectiveStart = rangeMode === "today" ? currentDay : Math.min(startDay, endDay);
   const effectiveEnd = rangeMode === "today" ? currentDay : Math.max(startDay, endDay);
@@ -219,6 +232,23 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
   }, [current, timerEnabled, selected, finished, remainingSeconds]);
 
   function startQuiz(selectedWords = scope, retry = false) {
+    if (!retry) {
+      try {
+        saveQuizPreferences(window.localStorage, {
+          rangeMode,
+          questionType,
+          directionMode,
+          statusFilters,
+          startDay,
+          endDay,
+          timerEnabled,
+          timerSeconds,
+        });
+        setPreferenceFeedback("saved");
+      } catch {
+        setPreferenceFeedback("error");
+      }
+    }
     setActiveScope(retry ? "retry" : rangeMode);
     const nextQuestions = makeQuestions(selectedWords, words, directionMode, questionType);
     setQuestions(nextQuestions);
@@ -312,6 +342,13 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
           <>
             <p className="eyebrow">VOCABULARY QUIZ</p>
             <h2 id="quiz-title">單字測驗</h2>
+            {preferenceFeedback && (
+              <p className={`quiz-preference-feedback ${preferenceFeedback === "error" ? "error" : "applied"}`} role="status">
+                {preferenceFeedback === "restored" && "✓ 已套用上次測驗設定；修改後開始測驗，就會更新這組偏好。"}
+                {preferenceFeedback === "saved" && "✓ 已保存本次測驗設定，下次開啟會自動沿用。"}
+                {preferenceFeedback === "error" && "無法保存測驗偏好，但仍可繼續本次測驗。"}
+              </p>
+            )}
             <div className="quiz-mode-tabs" role="group" aria-label="選擇測驗範圍">
               <button className={rangeMode === "today" ? "active" : ""} onClick={() => setRangeMode("today")}>當日 50 詞</button>
               <button className={rangeMode === "custom" ? "active" : ""} onClick={() => setRangeMode("custom")}>自訂天數</button>

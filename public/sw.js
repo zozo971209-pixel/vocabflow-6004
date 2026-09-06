@@ -1,4 +1,4 @@
-const CACHE_NAME = "vocabflow-offline-v10";
+const CACHE_NAME = "vocabflow-offline-v11";
 const BASE = "/vocabflow-6004";
 const CORE = [`${BASE}/`, `${BASE}/vocab.json`, `${BASE}/enrichment.json`, `${BASE}/enrichment-ai.json`, `${BASE}/bilingual-examples.json`, `${BASE}/favicon.svg`, `${BASE}/icon-192.png`, `${BASE}/icon-512.png`, `${BASE}/manifest.webmanifest`, `${BASE}/RIGHTS.md`];
 
