@@ -250,7 +250,7 @@ export default function Home() {
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=13`, { scope: `${BASE_PATH}/`, updateViaCache: "none" }).catch(() => {
+      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=14`, { scope: `${BASE_PATH}/`, updateViaCache: "none" }).catch(() => {
         setPwaFeedback("離線功能註冊失敗，請重新整理後再試。");
       });
     }
@@ -469,7 +469,7 @@ export default function Home() {
         </a>
         <div className="top-actions">
           <button className="primary-button" onClick={() => setQuizOpen(true)}>✦ 單字測驗</button>
-          <button className="primary-button top-settings-button" onClick={() => setSettingsOpen(true)} aria-label="學習設定">⚙ 設定</button>
+          <button className="primary-button top-settings-button" onClick={() => setSettingsOpen(true)} aria-label="學習設定">⚙ 學習設定</button>
         </div>
       </header>
 
@@ -477,8 +477,7 @@ export default function Home() {
         <section className="hero">
           <div>
             <p className="eyebrow">YOUR DAILY VOCABULARY</p>
-            <h1>今天，再前進 <span>{dayWords.length}</span> 個單字。</h1>
-            <p>每天混合第 1–6 級與不同字首；完成標記會自動保存在這台裝置。</p>
+            <p className="hero-description">每天混合第 1–6 級單字；完成標記會自動保存在這台裝置。</p>
             <a className="hero-start" href="#word-list">開始今日單字 <span aria-hidden="true">↓</span></a>
           </div>
           <div className="day-controls">

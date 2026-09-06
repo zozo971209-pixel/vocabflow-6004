@@ -10,7 +10,7 @@ export const metadata: Metadata = (() => {
     title,
     description,
     manifest: "/vocabflow-6004/manifest.webmanifest",
-    icons: { icon: "/vocabflow-6004/favicon.svg", shortcut: "/vocabflow-6004/favicon.svg", apple: "/vocabflow-6004/icon-192.png" },
+    icons: { icon: "/vocabflow-6004/favicon.svg", shortcut: "/vocabflow-6004/favicon.svg", apple: "/vocabflow-6004/icon-v-192.png" },
     openGraph: { title, description, images: [{ url: "/vocabflow-6004/og.png", width: 1536, height: 1024, alt: "詞序 VocabFlow 高中英文每日學習" }] },
     twitter: { card: "summary_large_image", title, description, images: ["/vocabflow-6004/og.png"] },
   };
