@@ -160,6 +160,8 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | WordStatus | "unmarked">("all");
   const [levelFilter, setLevelFilter] = useState(0);
+  // 0 follows the currently selected learning day; -1 searches every day.
+  const [searchDayFilter, setSearchDayFilter] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
@@ -281,7 +283,11 @@ export default function Home() {
 
   const filteredWords = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    const source = normalized ? words : dayWords;
+    const source = searchDayFilter === -1
+      ? words
+      : searchDayFilter === 0
+        ? dayWords
+        : words.slice((searchDayFilter - 1) * WORDS_PER_DAY, searchDayFilter * WORDS_PER_DAY);
     return source.filter((word) => {
       const matchesQuery = !normalized || word.word.toLowerCase().includes(normalized) ||
         word.meaning.toLowerCase().includes(normalized);
@@ -289,8 +295,8 @@ export default function Home() {
         (statusFilter === "unmarked" ? !statuses[word.id] : statuses[word.id] === statusFilter);
       const matchesLevel = levelFilter === 0 || word.level === levelFilter;
       return matchesQuery && matchesStatus && matchesLevel;
-    }).slice(0, normalized ? 120 : WORDS_PER_DAY);
-  }, [query, words, dayWords, statusFilter, levelFilter, statuses]);
+    }).slice(0, normalized || searchDayFilter === -1 ? 120 : WORDS_PER_DAY);
+  }, [query, words, dayWords, searchDayFilter, statusFilter, levelFilter, statuses]);
 
   const allCounts = useMemo(() => ({
     known: Object.values(statuses).filter((s) => s === "known").length,
@@ -450,8 +456,8 @@ export default function Home() {
           <span><strong>詞序 VocabFlow</strong><small>高中英文每日學習</small></span>
         </a>
         <div className="top-actions">
-          <button className="quiz-launch-button" onClick={() => setQuizOpen(true)}>✦ 單字測驗</button>
-          <button className="primary-button" onClick={() => setSettingsOpen(true)}>⚙ 學習設定</button>
+          <button className="primary-button" onClick={() => setQuizOpen(true)}>✦ 單字測驗</button>
+          <button className="quiet-button" onClick={() => setSettingsOpen(true)}>⚙ 學習設定</button>
         </div>
       </header>
 
@@ -461,6 +467,7 @@ export default function Home() {
             <p className="eyebrow">YOUR DAILY VOCABULARY</p>
             <h1>今天，再前進 <span>{dayWords.length}</span> 個單字。</h1>
             <p>每天混合第 1–6 級與不同字首；完成標記會自動保存在這台裝置。</p>
+            <a className="hero-start" href="#word-list">開始今日單字 <span aria-hidden="true">↓</span></a>
           </div>
           <div className="day-controls">
             <div className="day-switcher" aria-label="切換學習天數">
@@ -497,34 +504,39 @@ export default function Home() {
           <div className="stat-card unknown"><span>!</span><div><small>不熟</small><strong>{allCounts.unknown}</strong></div></div>
         </section>
 
-        <section className="toolbar">
+        <section className="toolbar" role="search" aria-label="搜尋與篩選單字">
           <label className="search-box">
             <span>⌕</span>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜尋全部 6,004 詞條（英文或中文）" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜尋目前範圍（英文或中文）" />
             {query && <button onClick={() => setQuery("")} aria-label="清除搜尋">×</button>}
           </label>
-          <select value={levelFilter} onChange={(e) => setLevelFilter(Number(e.target.value))} aria-label="依官方級別篩選">
-            <option value={0}>全部級別</option>
-            {[1,2,3,4,5,6].map((level) => <option key={level} value={level}>第 {level} 級</option>)}
-          </select>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)} aria-label="依學習狀態篩選">
-            <option value="all">全部狀態</option>
-            <option value="known">已熟悉</option>
-            <option value="review">待複習</option>
-            <option value="unknown">不熟</option>
-            <option value="unmarked">未標記</option>
-          </select>
+          <label className="filter-field"><span>天數</span><select value={searchDayFilter} onChange={(e) => setSearchDayFilter(Number(e.target.value))} aria-label="依學習天數篩選">
+              <option value={0}>當日（Day {safeDay}）</option>
+              <option value={-1}>全部天數</option>
+              {Array.from({ length: totalDays }, (_, index) => index + 1).map((day) => <option key={day} value={day}>第 {day} 天</option>)}
+            </select></label>
+          <label className="filter-field"><span>級別</span><select value={levelFilter} onChange={(e) => setLevelFilter(Number(e.target.value))} aria-label="依官方級別篩選">
+              <option value={0}>全部級別</option>
+              {[1,2,3,4,5,6].map((level) => <option key={level} value={level}>第 {level} 級</option>)}
+            </select></label>
+          <label className="filter-field"><span>熟悉度</span><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)} aria-label="依學習狀態篩選">
+              <option value="all">全部狀態</option>
+              <option value="known">已熟悉</option>
+              <option value="review">待複習</option>
+              <option value="unknown">不熟</option>
+              <option value="unmarked">未標記</option>
+            </select></label>
           <button className="speech-mode" onClick={() => setSpeechSpeed(nextSpeechSpeed)} aria-label="切換朗讀速度">
             <span>▶</span>朗讀：{speechSpeed === "ultraSlow" ? "超慢速" : speechSpeed === "slow" ? "慢速" : "正常"}
           </button>
         </section>
 
         <div className="list-heading">
-          <div><p>{query ? "全表搜尋結果" : `DAY ${safeDay} · TODAY'S WORDS`}</p><h2>{query ? `找到 ${filteredWords.length}${filteredWords.length === 120 ? "+" : ""} 筆` : "今日單字"}</h2></div>
+          <div><p>{query || searchDayFilter !== 0 ? (searchDayFilter === -1 ? "全部天數搜尋結果" : `第 ${searchDayFilter === 0 ? safeDay : searchDayFilter} 天搜尋結果`) : `DAY ${safeDay} · TODAY'S WORDS`}</p><h2>{query || searchDayFilter !== 0 ? `找到 ${filteredWords.length}${filteredWords.length === 120 ? "+" : ""} 筆` : "今日單字"}</h2></div>
           <p className="sorting-note">每日六級平均混合 · 固定 50 詞</p>
         </div>
 
-        <section className="word-grid" aria-live="polite">
+        <section className="word-grid" id="word-list" aria-live="polite">
           {filteredWords.map((word) => {
             const status = statuses[word.id];
             const dayRank = words.indexOf(word) % WORDS_PER_DAY + 1;
