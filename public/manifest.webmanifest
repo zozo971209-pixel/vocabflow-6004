@@ -1,10 +1,12 @@
 {
   "name": "詞序 VocabFlow｜高中英文每日學習",
   "short_name": "詞序",
+  "id": "/vocabflow-6004/",
   "description": "每天學習台灣高中英文參考詞彙，支援離線、測驗與本機進度保存。",
   "start_url": "/vocabflow-6004/",
   "scope": "/vocabflow-6004/",
   "display": "standalone",
+  "prefer_related_applications": false,
   "background_color": "#f4f6fb",
   "theme_color": "#4f46e5",
   "lang": "zh-Hant",

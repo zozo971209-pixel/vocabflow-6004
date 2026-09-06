@@ -200,6 +200,7 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .backup-feedback { margin: 10px 0 0; border-radius: 8px; padding: 8px 10px; font-size: 10px; line-height: 1.5; }
 .backup-feedback.success { color: #0e7850; background: #eaf8f2; }
 .backup-feedback.error { color: #b53145; background: #fff0f2; }
+.backup-feedback.info { color: #4251a6; background: #eef0ff; }
 .info-modal { width: min(540px, 100%); }
 .info-block { padding: 14px 0; border-top: 1px solid var(--line); }
 .info-block strong { font-size: 13px; }

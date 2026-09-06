@@ -16,6 +16,8 @@ export const metadata: Metadata = (() => {
   };
 })();
 
+const installCaptureScript = `window.__vocabflowInstallPrompt=null;window.__vocabflowInstalled=false;window.addEventListener('beforeinstallprompt',function(event){event.preventDefault();window.__vocabflowInstallPrompt=event;window.dispatchEvent(new Event('vocabflow-install-ready'))});window.addEventListener('appinstalled',function(){window.__vocabflowInstallPrompt=null;window.__vocabflowInstalled=true;window.dispatchEvent(new Event('vocabflow-installed'))});`;
+
 export const viewport: Viewport = {
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#4f46e5" },
@@ -25,5 +27,5 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const appearanceScript = `try{const s=JSON.parse(localStorage.getItem('vocab6004-settings-v1')||'{}');document.documentElement.dataset.theme=s.theme==='dark'?'dark':'light';document.documentElement.dataset.fontSize=['small','normal','large'].includes(s.fontSize)?s.fontSize:'normal'}catch{}`;
-  return <html lang="zh-Hant" suppressHydrationWarning><head><script dangerouslySetInnerHTML={{ __html: appearanceScript }} /></head><body>{children}</body></html>;
+  return <html lang="zh-Hant" suppressHydrationWarning><head><script dangerouslySetInnerHTML={{ __html: installCaptureScript }} /><script dangerouslySetInnerHTML={{ __html: appearanceScript }} /></head><body>{children}</body></html>;
 }

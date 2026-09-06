@@ -29,10 +29,18 @@ type SpeechSpeed = "ultraSlow" | "slow" | "normal";
 type ThemeMode = "light" | "dark";
 type FontSizeMode = "small" | "normal" | "large";
 type BackupFeedback = { type: "success" | "error"; text: string } | null;
+type PwaFeedback = { type: "success" | "error" | "info"; text: string } | null;
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+}
+
+declare global {
+  interface Window {
+    __vocabflowInstallPrompt: BeforeInstallPromptEvent | null;
+    __vocabflowInstalled: boolean;
+  }
 }
 
 const STORAGE_KEY = "vocab6004-progress-v1";
@@ -156,8 +164,9 @@ export default function Home() {
   const [aiGlosses, setAiGlosses] = useState<Record<string, string>>({});
   const [aiEnrichmentMeta, setAiEnrichmentMeta] = useState<Pick<AiEnrichmentPayload, "notice" | "source"> | null>(null);
   const [bilingualExamples, setBilingualExamples] = useState<Record<string, BilingualExample[]>>({});
-  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [pwaFeedback, setPwaFeedback] = useState("");
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(() => typeof window === "undefined" ? null : window.__vocabflowInstallPrompt);
+  const [pwaInstalled, setPwaInstalled] = useState(() => typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone) || window.__vocabflowInstalled));
+  const [pwaFeedback, setPwaFeedback] = useState<PwaFeedback>(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | WordStatus | "unmarked">("all");
   const [levelFilter, setLevelFilter] = useState(0);
@@ -250,16 +259,31 @@ export default function Home() {
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=14`, { scope: `${BASE_PATH}/`, updateViaCache: "none" }).catch(() => {
-        setPwaFeedback("離線功能註冊失敗，請重新整理後再試。");
-      });
+      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=15`, { scope: `${BASE_PATH}/`, updateViaCache: "none" })
+        .then((registration) => { registration.update().catch(() => undefined); })
+        .catch(() => {
+          setPwaFeedback({ type: "error", text: "離線功能註冊失敗，請確認網路後重新整理。現有進度不受影響。" });
+        });
     }
-    const handleInstall = (event: Event) => {
-      event.preventDefault();
-      setInstallPrompt(event as BeforeInstallPromptEvent);
+    const syncInstallPrompt = () => {
+      if (window.__vocabflowInstallPrompt) {
+        setInstallPrompt(window.__vocabflowInstallPrompt);
+        setPwaFeedback(null);
+      }
     };
-    window.addEventListener("beforeinstallprompt", handleInstall);
-    return () => window.removeEventListener("beforeinstallprompt", handleInstall);
+    const handleInstalled = () => {
+      setInstallPrompt(null);
+      setPwaInstalled(true);
+      setPwaFeedback({ type: "success", text: "安裝完成。之後可直接從桌面開啟。" });
+    };
+    const syncFrame = requestAnimationFrame(syncInstallPrompt);
+    window.addEventListener("vocabflow-install-ready", syncInstallPrompt);
+    window.addEventListener("vocabflow-installed", handleInstalled);
+    return () => {
+      cancelAnimationFrame(syncFrame);
+      window.removeEventListener("vocabflow-install-ready", syncInstallPrompt);
+      window.removeEventListener("vocabflow-installed", handleInstalled);
+    };
   }, []);
 
   const totalDays = Math.max(1, Math.ceil(words.length / WORDS_PER_DAY));
@@ -356,14 +380,34 @@ export default function Home() {
   }
 
   async function installPwa() {
-    if (!installPrompt) {
-      setPwaFeedback("若沒有安裝按鈕，請用瀏覽器選單的「安裝應用程式」或「加到主畫面」。");
+    if (pwaInstalled || window.matchMedia("(display-mode: standalone)").matches) {
+      setPwaFeedback({ type: "success", text: "這個裝置目前已用 App 模式開啟，不需要重複安裝。" });
       return;
     }
-    await installPrompt.prompt();
-    const choice = await installPrompt.userChoice;
-    setPwaFeedback(choice.outcome === "accepted" ? "已接受安裝。" : "已取消安裝，可稍後再試。");
-    setInstallPrompt(null);
+    const prompt = installPrompt ?? window.__vocabflowInstallPrompt;
+    if (!prompt) {
+      const userAgent = navigator.userAgent.toLowerCase();
+      const instruction = /iphone|ipad|ipod/.test(userAgent)
+        ? "iPhone／iPad 請使用 Safari，點「分享」→「加入主畫面」。Chrome 與 Edge 的 iOS 版本無法直接安裝。"
+        : /android/.test(userAgent)
+          ? "瀏覽器目前沒有提供安裝視窗。請重新整理後再試；若仍未出現，點瀏覽器右上角「⋮」→「安裝應用程式」或「加到主畫面」。剛刪除 App 時，可完全關閉瀏覽器後重新開啟本站。"
+          : "瀏覽器目前沒有提供安裝視窗。請重新整理後再試，或使用網址列的安裝圖示；也可從瀏覽器選單選擇「安裝應用程式」。";
+      setPwaFeedback({ type: "info", text: instruction });
+      return;
+    }
+    try {
+      await prompt.prompt();
+      const choice = await prompt.userChoice;
+      window.__vocabflowInstallPrompt = null;
+      setInstallPrompt(null);
+      setPwaFeedback(choice.outcome === "accepted"
+        ? { type: "success", text: "已接受安裝；系統完成後會出現在桌面或應用程式列表。" }
+        : { type: "info", text: "這次已取消安裝。瀏覽器可能暫時不再顯示視窗；可稍後重新整理，或使用瀏覽器選單安裝。" });
+    } catch {
+      window.__vocabflowInstallPrompt = null;
+      setInstallPrompt(null);
+      setPwaFeedback({ type: "error", text: "瀏覽器未能開啟安裝視窗。請重新整理後再試，或使用瀏覽器選單的「安裝應用程式／加到主畫面」。" });
+    }
   }
 
   function exportProgress() {
@@ -683,8 +727,8 @@ export default function Home() {
             </section>
             <section className="setting-section pwa-panel" aria-labelledby="pwa-title">
               <div><strong id="pwa-title">安裝與完整離線使用</strong><p>先在線上開啟一次，網站與 6,004 詞資料會快取至裝置；之後無網路仍可學習、測驗與寫筆記。</p></div>
-              <button type="button" className="backup-button export" onClick={installPwa}>＋ 安裝到裝置</button>
-              {pwaFeedback && <p className="backup-feedback" role="status">{pwaFeedback}</p>}
+              <button type="button" className="backup-button export" onClick={installPwa}>{pwaInstalled ? "✓ 已安裝至裝置" : "＋ 安裝到裝置"}</button>
+              {pwaFeedback && <p className={`backup-feedback ${pwaFeedback.type}`} role="status">{pwaFeedback.text}</p>}
             </section>
             <section className="backup-panel" aria-labelledby="backup-title">
               <div><strong id="backup-title">進度備份與換機轉移</strong><p>舊手機先匯出，新手機再匯入；檔案包含單字標記、學習設定、個人筆記與測驗紀錄，不會上傳到伺服器。</p></div>
