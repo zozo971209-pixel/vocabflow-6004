@@ -478,7 +478,6 @@ export default function Home() {
           <div>
             <p className="eyebrow">YOUR DAILY VOCABULARY</p>
             <p className="hero-description">每天混合第 1–6 級單字；完成標記會自動保存在這台裝置。</p>
-            <a className="hero-start" href="#word-list">開始今日單字 <span aria-hidden="true">↓</span></a>
           </div>
           <div className="day-controls">
             <div className="day-switcher" aria-label="切換學習天數">
