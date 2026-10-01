@@ -261,8 +261,15 @@ export default function Home() {
   }, [theme, fontSize]);
 
   useEffect(() => {
+    let reloadingForUpdate = false;
+    const handleControllerChange = () => {
+      if (reloadingForUpdate) return;
+      reloadingForUpdate = true;
+      window.location.reload();
+    };
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=22`, { scope: `${BASE_PATH}/`, updateViaCache: "none" })
+      navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
+      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=23`, { scope: `${BASE_PATH}/`, updateViaCache: "none" })
         .then((registration) => { registration.update().catch(() => undefined); })
         .catch(() => {
           setPwaFeedback({ type: "error", text: "離線功能註冊失敗，請確認網路後重新整理。現有進度不受影響。" });
@@ -283,6 +290,7 @@ export default function Home() {
     window.addEventListener("vocabflow-installed", handleInstalled);
     return () => {
       cancelAnimationFrame(syncFrame);
+      if ("serviceWorker" in navigator) navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
       window.removeEventListener("vocabflow-install-ready", syncInstallPrompt);
       window.removeEventListener("vocabflow-installed", handleInstalled);
     };
