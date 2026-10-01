@@ -413,10 +413,10 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .ai-example-list .example-english { display: block; font-size: 11px; line-height: 1.55; }
 .ai-example-list .example-translation { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; line-height: 1.55; }
 .ai-example-list .example-target { color: var(--indigo); font-weight: 900; }
+.canonical-sense-label { display: block; margin-bottom: 2px; color: var(--indigo); font-weight: 800; }
+.canonical-sense-explanation { display: block; margin-bottom: 5px; color: var(--muted); font-size: 10px; line-height: 1.45; }
 .example-source { display: block; margin-top: 4px; color: var(--muted); font-size: 9px; line-height: 1.4; }
 .example-source a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
-.ai-draft-warning { margin: 0 0 8px; padding: 7px 9px; border: 1px solid #f2d59a; border-radius: 8px; background: #fff8e8; color: #8a5a00; font-size: 10px; line-height: 1.5; }
-.example-source-ai { color: #996b1d; }
 .source-example-list { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line); }
 .source-example-item { padding-bottom: 8px; border-bottom: 1px dashed var(--line); overflow-wrap: anywhere; }
 .source-example-item:last-child { padding-bottom: 0; border-bottom: 0; }
@@ -424,11 +424,6 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .source-example-kind { display: inline-block; margin-top: 4px; padding: 2px 5px; border-radius: 999px; background: #eeefff; color: var(--indigo); font-size: 9px; line-height: 1.2; }
 .source-example-list .example-target { color: var(--indigo); font-weight: 900; }
 .word-details-content .definition-note { margin-top: 9px; padding-top: 8px; border-top: 1px dashed var(--line); color: var(--muted); font-size: 9px; overflow-wrap: anywhere; }
-.ai-content-notice { grid-column: 1 / -1; padding: 11px; border: 1px solid #d9dcff; border-radius: 10px; background: #f0f1ff; color: var(--ink); }
-.ai-content-notice strong { display: block; margin-bottom: 4px; color: var(--indigo); font-size: 10px; }
-.word-details-content .ai-content-notice p { color: var(--muted); font-size: 9px; }
-.ai-content-notice small { display: block; margin-top: 5px; color: var(--muted); font-size: 9px; overflow-wrap: anywhere; }
-.ai-content-notice a { color: var(--indigo); }
 html[data-theme="dark"] .verified-badge { background: #163d27; color: #9ce5b6; }
 .personal-note { grid-column: 1 / -1; }
 .personal-note textarea { width: 100%; min-height: 78px; resize: vertical; border: 1px solid var(--line); border-radius: 8px; padding: 9px; background: var(--panel); color: var(--ink); font-size: 12px; line-height: 1.55; }
@@ -454,15 +449,13 @@ html[data-font-size="large"] .hero > div > p:last-child, html[data-font-size="la
 html[data-font-size="large"] .modal > label span, html[data-font-size="large"] .setting-section p { font-size: 13px; }
 html[data-font-size="large"] input, html[data-font-size="large"] select, html[data-font-size="large"] textarea { font-size: 14px; }
 html[data-theme="dark"] .topbar { background: rgba(14,19,32,.94); }
-html[data-theme="dark"] .day-switcher, html[data-theme="dark"] .date-jump, html[data-theme="dark"] .stat-card, html[data-theme="dark"] .search-box, html[data-theme="dark"] .toolbar select, html[data-theme="dark"] .speech-mode, html[data-theme="dark"] .word-card, html[data-theme="dark"] .modal, html[data-theme="dark"] .quiz-modal, html[data-theme="dark"] .quiz-options button, html[data-theme="dark"] .status-actions button, html[data-theme="dark"] .bottom-nav button, html[data-theme="dark"] .backup-button, html[data-theme="dark"] .quiz-status-options button, html[data-theme="dark"] .quiz-direction-options button, html[data-theme="dark"] .quiz-question-type-options button, html[data-theme="dark"] .setting-section, html[data-theme="dark"] .word-details-content section, html[data-theme="dark"] .personal-note, html[data-theme="dark"] .quiz-timer-picker, html[data-theme="dark"] .ai-content-notice { background: var(--panel); color: var(--ink); }
+html[data-theme="dark"] .day-switcher, html[data-theme="dark"] .date-jump, html[data-theme="dark"] .stat-card, html[data-theme="dark"] .search-box, html[data-theme="dark"] .toolbar select, html[data-theme="dark"] .speech-mode, html[data-theme="dark"] .word-card, html[data-theme="dark"] .modal, html[data-theme="dark"] .quiz-modal, html[data-theme="dark"] .quiz-options button, html[data-theme="dark"] .status-actions button, html[data-theme="dark"] .bottom-nav button, html[data-theme="dark"] .backup-button, html[data-theme="dark"] .quiz-status-options button, html[data-theme="dark"] .quiz-direction-options button, html[data-theme="dark"] .quiz-question-type-options button, html[data-theme="dark"] .setting-section, html[data-theme="dark"] .word-details-content section, html[data-theme="dark"] .personal-note, html[data-theme="dark"] .quiz-timer-picker { background: var(--panel); color: var(--ink); }
 html[data-theme="dark"] .search-day-range { background: #20273a; border-color: var(--line); }
 html[data-theme="dark"] .quiz-preference-feedback.applied { background: #163d27; border-color: #24613e; color: #9ce5b6; }
 html[data-theme="dark"] .meaning, html[data-theme="dark"] .fixed-setting, html[data-theme="dark"] .plan-summary, html[data-theme="dark"] .backup-panel, html[data-theme="dark"] .quiz-mode-tabs, html[data-theme="dark"] .quiz-summary, html[data-theme="dark"] .quiz-wrong-list { background: #20273a; }
 html[data-theme="dark"] .meaning-group + .meaning-group { border-color: #353e55; }
 html[data-theme="dark"] .meaning-senses { color: #c4cada; }
 html[data-theme="dark"] .ai-example-list .example-target { color: #c7caff; }
-html[data-theme="dark"] .ai-draft-warning { background: #3c301a; border-color: #725a25; color: #f0cb78; }
-html[data-theme="dark"] .example-source-ai { color: #e1bd67; }
 html[data-theme="dark"] .meaning-supplement, html[data-theme="dark"] .meaning-pos small { color: #9da7bd; }
 html[data-theme="dark"] .meaning-pos.pos-n { background: #24375e; color: #a9c5ff; }
 html[data-theme="dark"] .meaning-pos.pos-v, html[data-theme="dark"] .meaning-pos.pos-vt, html[data-theme="dark"] .meaning-pos.pos-vi { background: #183f38; color: #91ddc4; }
@@ -478,7 +471,6 @@ html[data-theme="dark"] input[type="date"] { color-scheme: dark; }
 @media (max-width: 620px) {
   .word-details-content { grid-template-columns: 1fr; }
   .personal-note { grid-column: auto; }
-  .ai-content-notice { grid-column: auto; }
   .quiz-timer-picker { grid-template-columns: 1fr; }
   .quiz-timer-picker small { grid-column: auto; }
   .search-day-range { align-items: stretch; flex-wrap: wrap; }

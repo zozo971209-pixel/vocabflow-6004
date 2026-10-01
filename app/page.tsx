@@ -4,13 +4,12 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import QuizModal, { QuizHistoryEntry, QuizWordStatus } from "./QuizModal";
 import WordDetails from "./WordDetails";
 import { isVerifiedEnrichmentRecord, VerifiedEnrichmentRecord } from "./enrichment";
-import { AiEnrichmentPayload, AiEnrichmentWord, isAiEnrichmentPayload } from "./aiEnrichment";
+import { AiEnrichmentWord, isAiEnrichmentPayload } from "./aiEnrichment";
 import { BilingualExample, isBilingualExamplePayload } from "./bilingualExamples";
 import { SourceExample, isSourceExamplePayload } from "./sourceExamples";
-import { AiDraftExample, isAiDraftExamplePayload } from "./aiExampleFallbacks";
+import { CanonicalExample, isCanonicalExamplePayload } from "./canonicalExamples";
 import { buildWordFamilyMap } from "./wordEnhancements";
 import { parseMeaningGroups } from "./meaningGroups";
-import { applyMeaningEditorial, isPrimaryMeaning } from "./meaningEditorial";
 import { dueReviewIds, localDate, ReviewMap, scheduleReview } from "./reviewSchedule";
 import { mergeProgress, parseProgressBackup, ProgressSnapshot } from "./progressBackup";
 import { persistProgress } from "./progressStorage";
@@ -23,6 +22,7 @@ type Word = {
   phonetic: string;
   meaning: string;
   note: string;
+  primaryMeanings?: string[];
 };
 
 type WordStatus = QuizWordStatus;
@@ -101,6 +101,11 @@ function cleanSpeechText(text: string, lang: "en-US" | "zh-TW") {
     .trim();
 }
 
+function formatPhonetic(value: string) {
+  if (!value) return "";
+  return value.includes("/") ? value : `/ ${value} /`;
+}
+
 function speak(text: string, lang: "en-US" | "zh-TW", speed: SpeechSpeed) {
   if (!("speechSynthesis" in window)) return;
   window.speechSynthesis.cancel();
@@ -153,10 +158,9 @@ export default function Home() {
   const [enrichmentRecords, setEnrichmentRecords] = useState<VerifiedEnrichmentRecord[]>([]);
   const [aiEnrichment, setAiEnrichment] = useState<Record<string, AiEnrichmentWord>>({});
   const [aiGlosses, setAiGlosses] = useState<Record<string, string>>({});
-  const [aiEnrichmentMeta, setAiEnrichmentMeta] = useState<Pick<AiEnrichmentPayload, "notice" | "source"> | null>(null);
   const [bilingualExamples, setBilingualExamples] = useState<Record<string, BilingualExample[]>>({});
   const [sourceExamples, setSourceExamples] = useState<Record<string, SourceExample[]>>({});
-  const [aiDraftExamples, setAiDraftExamples] = useState<Record<string, AiDraftExample[]>>({});
+  const [canonicalExamples, setCanonicalExamples] = useState<Record<string, CanonicalExample[]>>({});
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(() => typeof window === "undefined" ? null : window.__vocabflowInstallPrompt);
   const [pwaFeedback, setPwaFeedback] = useState<PwaFeedback>(null);
   const [query, setQuery] = useState("");
@@ -185,13 +189,13 @@ export default function Home() {
       fetch(`${BASE_PATH}/enrichment-ai.json`).then((res) => res.json()),
       fetch(`${BASE_PATH}/bilingual-examples.json`).then((res) => res.json()),
       fetch(`${BASE_PATH}/source-examples.json`).then((res) => res.ok ? res.json() : null).catch(() => null),
-      fetch(`${BASE_PATH}/ai-example-fallbacks.json`).then((res) => res.ok ? res.json() : null).catch(() => null),
+      fetch(`${BASE_PATH}/canonical-examples.json`).then((res) => res.ok ? res.json() : null).catch(() => null),
       Promise.resolve().then(() => localStorage.getItem(STORAGE_KEY)),
       Promise.resolve().then(() => localStorage.getItem(SETTINGS_KEY)),
       Promise.resolve().then(() => localStorage.getItem(QUIZ_HISTORY_KEY)),
       Promise.resolve().then(() => localStorage.getItem(NOTES_KEY)),
-    ]).then(([data, enrichment, aiData, exampleData, sourceExampleData, aiDraftExampleData, savedStatuses, savedSettings, savedQuizHistory, savedNotes]) => {
-      setWords((data as Word[]).map(applyMeaningEditorial));
+    ]).then(([data, enrichment, aiData, exampleData, sourceExampleData, canonicalExampleData, savedStatuses, savedSettings, savedQuizHistory, savedNotes]) => {
+      setWords(data as Word[]);
       if (enrichment && typeof enrichment === "object" && (enrichment as { schemaVersion?: unknown }).schemaVersion === 1) {
         const candidateRecords = (enrichment as { records?: unknown }).records;
         if (Array.isArray(candidateRecords)) setEnrichmentRecords(candidateRecords.filter(isVerifiedEnrichmentRecord));
@@ -199,7 +203,6 @@ export default function Home() {
       if (isAiEnrichmentPayload(aiData)) {
         setAiEnrichment(aiData.words);
         setAiGlosses(aiData.glosses ?? {});
-        setAiEnrichmentMeta({ notice: aiData.notice, source: aiData.source });
       }
       if (isBilingualExamplePayload(exampleData)) {
         setBilingualExamples(exampleData.words);
@@ -207,8 +210,8 @@ export default function Home() {
       if (isSourceExamplePayload(sourceExampleData)) {
         setSourceExamples(sourceExampleData.words);
       }
-      if (isAiDraftExamplePayload(aiDraftExampleData)) {
-        setAiDraftExamples(aiDraftExampleData.words);
+      if (isCanonicalExamplePayload(canonicalExampleData)) {
+        setCanonicalExamples(canonicalExampleData.words);
       }
       if (savedStatuses) setStatuses(JSON.parse(savedStatuses));
       if (savedSettings) {
@@ -259,7 +262,7 @@ export default function Home() {
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=16`, { scope: `${BASE_PATH}/`, updateViaCache: "none" })
+      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=22`, { scope: `${BASE_PATH}/`, updateViaCache: "none" })
         .then((registration) => { registration.update().catch(() => undefined); })
         .catch(() => {
           setPwaFeedback({ type: "error", text: "離線功能註冊失敗，請確認網路後重新整理。現有進度不受影響。" });
@@ -339,13 +342,7 @@ export default function Home() {
     unknown: Object.values(statuses).filter((s) => s === "unknown").length,
   }), [statuses]);
 
-  const sourceCoverage = useMemo(() => {
-    const ids = new Set(Object.entries(bilingualExamples)
-      .filter(([, records]) => records.some((record) => (record.sourceType === "tatoeba" || record.sourceType === "open-wordnet") && record.qualityScore >= 40))
-      .map(([id]) => id));
-    Object.keys(sourceExamples).forEach((id) => ids.add(id));
-    return ids.size;
-  }, [bilingualExamples, sourceExamples]);
+  const canonicalCoverage = Object.keys(canonicalExamples).length;
 
   function mark(id: number, status: WordStatus) {
     setStatuses((current) => ({ ...current, [id]: status }));
@@ -610,7 +607,7 @@ export default function Home() {
                   <span className={`level level-${word.level}`}>LEVEL {word.level}</span>
                 </div>
                 <div className="word-line">
-                  <div><h3>{word.word}</h3><p>{word.pos} <span>{word.phonetic && `/ ${word.phonetic} /`}</span></p></div>
+                  <div><h3>{word.word}</h3><p>{word.pos} <span>{formatPhonetic(word.phonetic)}</span></p></div>
                   <button className="speak-button" onClick={() => speak(word.word, "en-US", speechSpeed)} aria-label={`朗讀 ${word.word}`}>▶<small>EN</small></button>
                 </div>
                 <div className="meaning">
@@ -622,7 +619,7 @@ export default function Home() {
                           {group.sourceField && <small>[{group.sourceField}]</small>}
                         </div>
                         <p className="meaning-senses">
-                          {group.senses.map((sense, index) => <span key={`${sense}-${index}`}>{index > 0 && "、"}{!group.sourceField && isPrimaryMeaning(word.id, word.word, group.abbreviation, sense) ? <strong className="primary-meaning" title="主要意思：依詞性與學習字典用法選定">{sense}</strong> : sense}</span>)}
+                          {group.senses.map((sense, index) => <span key={`${sense}-${index}`}>{index > 0 && "、"}{!group.sourceField && word.primaryMeanings?.includes(sense) ? <strong className="primary-meaning" title="主要意思">{sense}</strong> : sense}</span>)}
                         </p>
                         {group.supplements.map((supplement) => (
                           <p className="meaning-supplement" key={`${supplement.field}-${supplement.senses.join("-")}`}>
@@ -647,11 +644,10 @@ export default function Home() {
                   family={familyMap.get(word.id) ?? []}
                   records={enrichmentMap.get(word.id) ?? []}
                   aiData={aiEnrichment[String(word.id)]}
-                  aiMeta={aiEnrichmentMeta}
                   aiGlosses={aiGlosses}
                   examples={bilingualExamples[String(word.id)] ?? []}
                   sourceExamples={sourceExamples[String(word.id)] ?? []}
-                  aiFallbackExamples={aiDraftExamples[String(word.id)] ?? []}
+                  canonicalExamples={canonicalExamples[String(word.id)] ?? []}
                   personalNote={wordNotes[word.id] ?? ""}
                   onNoteChange={updateWordNote}
                 />
@@ -756,9 +752,8 @@ export default function Home() {
             <button className="modal-close" onClick={() => setInfoOpen(false)} aria-label="關閉">×</button>
             <p className="eyebrow">ABOUT THE DATA</p><h2 id="info-title">資料範圍與排序方式</h2>
             <div className="info-block"><strong>6,004 個官方詞條</strong><p>英文詞彙、詞性與六級分級來自大學入學考試中心《高中英文參考詞彙表（111學年度起適用）》。</p></div>
-            <div className="info-block"><strong>中文不是大考中心官方翻譯</strong><p>中文釋義與音標由原 Excel 中的開源 ECDICT 英漢字典資料補充。</p></div>
-            <div className="info-block"><strong>字義依用途分類，不標主次</strong><p>中文解釋依詞性分組，法律、醫學、化學、電腦等專業補充另列；不再以粗體推測哪個意思較常用。</p></div>
-            <div className="info-block"><strong>來源與品質優先的例句</strong><p>目前有 {sourceCoverage} / {words.length} 個詞條具備可公開來源的 Tatoeba 雙語句或 Open English Wordnet 英文用例；其餘詞條會顯示明確標示的 AI 造句草稿。Tatoeba 雙語句只顯示自動品質分數至少 40 的紀錄；分數依句子完整度、目標詞對齊、長度與翻譯覆蓋計算，不是人工評分。公開來源句保留授權連結，AI 草稿不會冒充字典原句。Oxford、Cambridge 等出版社原句必須透過正式 API／授權取得，未授權前只提供查閱連結。</p></div>
+            <div className="info-block"><strong>交叉核對後的學習內容</strong><p>網站目前直接使用 canonical VocabFlow 資料庫的美式 IPA、分詞性詞義、主要意思及繁體中文說明；詞義以 Collins 與 Merriam-Webster 的核對紀錄為依據，再以本站文字重新整理。</p></div>
+            <div className="info-block"><strong>完整雙語例句</strong><p>目前 {canonicalCoverage} / {words.length} 個詞條均有依個別詞義撰寫的 ORIGINAL 英文例句與繁體中文翻譯；字典內容只作核對依據，不直接複製出版社例句。</p></div>
             <div className="info-block"><strong>每日混合六級與不同字首</strong><p>每天固定安排 50 詞，第 1–6 級各約 8–9 詞，並分散不同英文字母開頭；卡片的 1–50 是當日學習順序。因官方總數為 6,004，第 121 天是剩餘的最後 4 詞。</p></div>
             <a className="source-link" href="https://www.ceec.edu.tw/files/file_pool/1/0k213571061045122620/%E9%AB%98%E4%B8%AD%E8%8B%B1%E6%96%87%E5%8F%83%E8%80%83%E8%A9%9E%E5%BD%99%E8%A1%A8%28111%E5%AD%B8%E5%B9%B4%E5%BA%A6%E8%B5%B7%E9%81%A9%E7%94%A8%29.pdf" target="_blank" rel="noreferrer">查看大考中心原始詞彙表 ↗</a>
           </section>

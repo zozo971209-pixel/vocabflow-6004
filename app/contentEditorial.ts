@@ -30,7 +30,7 @@ export const contentEditorial: Record<number, ContentEdit> = {
     examples: [["Our first class starts at 8 a.m.", "我們的第一堂課在上午八點開始。", "a.m.", "上午", "adv"]],
   },
   3996: {
-    headword: "pm/p.m.", family: [], phrases: [], synonyms: [], antonyms: [["a.m.", "上午；午夜後至中午前"]],
+    headword: "pm", family: [], phrases: [], synonyms: [], antonyms: [["a.m.", "上午；午夜後至中午前"]],
     collocations: [["at 3 p.m.", "在下午三點"], ["until 9 p.m.", "直到晚上九點"]],
     usage: ["p.m. 用於中午後至午夜前，8 p.m. 是晚上八點，不是下午八點。此詞條不採 PM 的其他縮寫義。"],
     examples: [["The library closes at 9 p.m.", "圖書館在晚上九點關門。", "p.m.", "晚上", "adv"]],

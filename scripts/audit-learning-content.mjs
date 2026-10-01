@@ -10,9 +10,9 @@ const { editedEnrichment, contentEditorial } = await load("app/contentEditorial.
 const words = JSON.parse(fs.readFileSync("public/vocab.json", "utf8"));
 const examples = JSON.parse(fs.readFileSync("public/bilingual-examples.json", "utf8"));
 const sourceExamples = JSON.parse(fs.readFileSync("public/source-examples.json", "utf8"));
-const aiFallbackExamples = JSON.parse(fs.readFileSync("public/ai-example-fallbacks.json", "utf8"));
+const canonicalExamples = JSON.parse(fs.readFileSync("public/canonical-examples.json", "utf8"));
 const enrichment = JSON.parse(fs.readFileSync("public/enrichment-ai.json", "utf8"));
-const report = { words: words.length, examples: 0, wordnetExamples: 0, sourceExampleWords: 0, aiFallbackWords: 0, noSourceExamples: [], editorialWords: Object.keys(contentEditorial).length, errors: [], posWarnings: [], missingGlosses: [], noCollocations: [], noSentencePatterns: [] };
+const report = { words: words.length, canonicalSenseExamples: 0, canonicalExampleWords: 0, examples: 0, wordnetExamples: 0, sourceExampleWords: 0, noCanonicalExamples: [], editorialWords: Object.keys(contentEditorial).length, errors: [], posWarnings: [], missingGlosses: [], noCollocations: [], noSentencePatterns: [] };
 const normalizePos = value => ({ a: "adj", s: "adj", r: "adv", ad: "adv", vt: "v", vi: "v" }[value] ?? value);
 const sourceTypes = new Set(["tatoeba", "open-wordnet"]);
 for (const word of words) {
@@ -21,11 +21,17 @@ for (const word of words) {
   const records = examples.words[word.id] ?? [];
   const displayableRecords = records.filter((record) => record.qualityScore >= 40);
   const wordnetRecords = sourceExamples.words?.[word.id] ?? [];
-  const aiFallbackRecords = aiFallbackExamples.words?.[word.id] ?? [];
+  const canonicalRecords = canonicalExamples.words?.[word.id] ?? [];
+  report.canonicalSenseExamples += canonicalRecords.length;
+  if (canonicalRecords.length) report.canonicalExampleWords++;
+  else report.noCanonicalExamples.push({ id: word.id, word: word.word });
+  for (const record of canonicalRecords) {
+    if (!record.senseId || !record.pos || !record.meaning || !record.explanation || !record.en || !record.zh || !Array.isArray(record.targetForms) || !record.targetForms.length || !/[A-Za-z]/.test(record.en) || !/[\u3400-\u9fff]/.test(record.zh)) {
+      report.errors.push({ id: word.id, error: "invalid canonical example", record });
+    }
+  }
   report.wordnetExamples += wordnetRecords.length;
-  if (!displayableRecords.length && !wordnetRecords.length && !aiFallbackRecords.length) report.noSourceExamples.push({ id: word.id, word: word.word });
-  if (aiFallbackRecords.length) report.aiFallbackWords++;
-  else if (displayableRecords.length || wordnetRecords.length) report.sourceExampleWords++;
+  if (displayableRecords.length || wordnetRecords.length) report.sourceExampleWords++;
   const officialPos = (word.pos.match(/[a-z]+/g) ?? []).map(normalizePos);
   for (const example of records ?? []) {
     report.examples++;
@@ -52,5 +58,10 @@ for (const word of words) {
 }
 fs.mkdirSync("outputs", { recursive: true });
 fs.writeFileSync("outputs/learning-content-audit.json", JSON.stringify(report, null, 2));
-console.log(JSON.stringify({ ...report, noSourceExamples: report.noSourceExamples.length, errors: report.errors.length, posWarnings: report.posWarnings.length, missingGlosses: report.missingGlosses.length, noCollocations: report.noCollocations.length, noSentencePatterns: report.noSentencePatterns.length }, null, 2));
+console.log(JSON.stringify({ ...report, noCanonicalExamples: report.noCanonicalExamples.length, errors: report.errors.length, posWarnings: report.posWarnings.length, missingGlosses: report.missingGlosses.length, noCollocations: report.noCollocations.length, noSentencePatterns: report.noSentencePatterns.length }, null, 2));
+assert.equal(report.words, 6004, "Canonical web vocabulary must contain exactly 6,004 words");
+assert.equal(new Set(words.map((word) => word.id)).size, 6004, "Canonical word IDs must be unique");
+assert.equal(Math.min(...words.map((word) => word.id)), 1, "Canonical word IDs must begin at 1");
+assert.equal(Math.max(...words.map((word) => word.id)), 6004, "Canonical word IDs must end at 6004");
+assert.equal(report.noCanonicalExamples.length, 0, "Every canonical word must have at least one bilingual example");
 assert.equal(report.errors.length, 0, "Invalid examples must be fixed before release");
