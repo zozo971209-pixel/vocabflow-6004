@@ -10,7 +10,13 @@
     "build": "next build",
     "start": "next start",
     "test": "npm run build",
-    "lint": "eslint app scripts/*.mjs --ignore-pattern .next --ignore-pattern out"
+    "lint": "eslint app scripts/*.mjs --ignore-pattern .next --ignore-pattern out",
+    "examples:wordnet": "node scripts/build-wordnet-source-examples.mjs",
+    "examples:audit": "node scripts/audit-source-examples.mjs",
+    "examples:ai-fallbacks": "node scripts/build-ai-example-fallbacks-public.mjs",
+    "examples:ai-audit": "node scripts/audit-ai-example-fallbacks.mjs",
+    "examples:publish-source-only": "node scripts/publish-source-only-examples.mjs",
+    "content:audit": "node scripts/audit-learning-content.mjs"
   },
   "dependencies": {
     "next": "16.2.6",

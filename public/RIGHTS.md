@@ -14,9 +14,12 @@ Copyright © 2026 zozo971209-pixel. All rights reserved.
 - 中文釋義與音標：由原始 Excel 所含的開源 ECDICT 英漢字典資料補充。原始專案及 MIT 授權：https://github.com/skywind3000/ECDICT
 - 延伸學習的英文釋義、詞義關係、同反義詞、詞形與部分片語：Open English WordNet 2025，依 CC BY 4.0 授權使用。來源：https://en-word.net/；授權：https://creativecommons.org/licenses/by/4.0/
 - 詞族、搭配詞與同義詞的繁體中文提示：單字與可直接查得的詞組優先採用 ECDICT，其餘由本機 AI 依目標詞及中文詞義翻譯。
-- 完整英中例句：Tatoeba，依 CC BY 2.0 FR 授權使用；中文經 OpenCC 轉為繁體。來源：https://tatoeba.org/；授權：https://creativecommons.org/licenses/by/2.0/fr/
+- 完整英中例句：目前正式顯示的來源例句主要來自 Tatoeba，依 CC BY 2.0 FR 授權使用；中文經 OpenCC 轉為繁體。每句例句會在介面顯示來源與授權連結。來源：https://tatoeba.org/；授權：https://creativecommons.org/licenses/by/2.0/fr/
+- 品質篩選：Tatoeba 雙語句在介面只顯示自動品質分數至少 40 的紀錄；該分數由句子完整度、目標詞對齊、長度與翻譯覆蓋等規則計算，不等於人工評分，也不保證每句都適合所有語境。
+- Wordnet 用例分類：介面會區分完整句與詞典用例片語，避免把片語誤標為完整造句。
+- 專業來源英文用例：另收錄由 Open English Wordnet 2025 提供的英文原文，依 CC BY 4.0 授權；介面明確標示其只提供英文原文，未把自動翻譯冒充原始來源。來源：https://en-word.net/；授權：https://creativecommons.org/licenses/by/4.0/
 
-未能由 Tatoeba 句對涵蓋的詞條，其例句由本機 AI 依本站詞義資料產生，不屬於 Tatoeba 原句。
+未能由公開來源涵蓋的詞條，網站會在獨立的 `ai-example-fallbacks.json` 顯示 AI 造句草稿，以完成學習流程；介面與資料欄位均明確標示其為 AI 草稿，未經人工逐句核對，不屬於 Tatoeba、Open English Wordnet 或任何出版社詞典原句。完整草稿與重建資料仍保留於本機 `outputs/`。
 
 延伸學習內容經由程式與 AI 自動選取、合併及產生學習提示，並未逐筆完成人工核對。網站介面會在延伸內容下方顯示此限制；自動整理部分不應被視為 Open English WordNet 的原始表述或官方教學建議。
 

@@ -106,7 +106,7 @@ export function editedExamples(wordId: number): BilingualExample[] | undefined {
     const match = new RegExp(`(?<![A-Za-z])${escaped}(?![A-Za-z])`, "i").exec(en);
     const enStart = match?.index ?? -1;
     const zhStart = zh.indexOf(targetZh);
-    return { en, zh, targetEn: match?.[0] ?? targetEn, targetZh, enStart, enEnd: enStart + targetEn.length, zhStart, zhEnd: zhStart + targetZh.length, pos, senseZh: targetZh, origin: "ai-generated", qualityScore: 0 };
+    return { en, zh, targetEn: match?.[0] ?? targetEn, targetZh, enStart, enEnd: enStart + targetEn.length, zhStart, zhEnd: zhStart + targetZh.length, pos, senseZh: targetZh, origin: "ai-generated", sourceType: "ai-draft", reviewStatus: "ai-draft", qualityScore: 0 };
   });
 }
 

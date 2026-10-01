@@ -15,18 +15,25 @@ const pos = Object.fromEntries(posRows);
 const texts = Object.fromEntries(textRows.map(([id, ...values]) => [id, values]));
 let metadataEdits = 0;
 let sentenceEdits = 0;
+let skippedDraftEdits = 0;
 for (const [id, newPos] of posRows) {
   assert(ids.has(Number(id)), `Invalid word ID ${id}`);
   const records = payload.words[id];
-  assert(records?.length);
+  if (!records?.length) {
+    skippedDraftEdits += 1;
+    continue;
+  }
   const word = words.find(word => word.id === Number(id));
   const normalizePos = value => ({ a: "adj", ad: "adv", r: "adv", s: "adj", vt: "v", vi: "v" }[value] ?? value);
   const official = (word.pos.match(/[a-z]+/g) ?? []).map(normalizePos);
   assert(official.includes(newPos), `${word.word}: new POS is outside the official listed scope`);
-  const index = records.findIndex(example => !official.includes(normalizePos(example.pos.replaceAll(".", ""))));
+  const index = records.findIndex(example => example.sourceType === "ai-draft" && !official.includes(normalizePos(example.pos.replaceAll(".", ""))));
   // Idempotent reruns may find the previous AI editorial record instead.
-  const targetIndex = index >= 0 ? index : records.findIndex(example => example.editorialRevision === "2026-09-learning-quality");
-  assert(targetIndex >= 0, `Expected an identifiable correction target for ${word.word}`);
+  const targetIndex = index >= 0 ? index : records.findIndex(example => example.sourceType === "ai-draft" && example.editorialRevision === "2026-09-learning-quality");
+  if (targetIndex < 0) {
+    skippedDraftEdits += 1;
+    continue;
+  }
   if (texts[id]) {
     const [en, zh, targetEn, targetZh] = texts[id];
     const escaped = targetEn.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -34,7 +41,7 @@ for (const [id, newPos] of posRows) {
     assert(match && zh.includes(targetZh), `Invalid highlight: ${word.word}`);
     const enStart = match.index;
     const zhStart = zh.indexOf(targetZh);
-    records[targetIndex] = { en, zh, enStart, enEnd: enStart + targetEn.length, zhStart, zhEnd: zhStart + targetZh.length, targetEn: match[0], targetZh, senseZh: targetZh, pos: newPos, origin: "ai-generated", qualityScore: 0, editorialRevision: "2026-09-learning-quality" };
+    records[targetIndex] = { en, zh, enStart, enEnd: enStart + targetEn.length, zhStart, zhEnd: zhStart + targetZh.length, targetEn: match[0], targetZh, senseZh: targetZh, pos: newPos, origin: "ai-generated", sourceType: "ai-draft", reviewStatus: "ai-draft", qualityScore: 0, editorialRevision: "2026-09-learning-quality" };
     sentenceEdits++;
   } else {
     records[targetIndex] = { ...records[targetIndex], pos: newPos, editorialRevision: "2026-09-learning-quality" };
@@ -42,11 +49,17 @@ for (const [id, newPos] of posRows) {
   }
 }
 for (const id of Object.keys(texts)) assert(pos[id], `A sentence edit requires a POS review: ${id}`);
+const sourceTypes = new Set(["tatoeba", "open-wordnet"]);
+payload.words = Object.fromEntries(
+  Object.entries(payload.words)
+    .map(([id, records]) => [id, records.filter(example => sourceTypes.has(example.sourceType))])
+    .filter(([, records]) => records.length),
+);
 const all = Object.values(payload.words).flat();
-payload.stats = { ...payload.stats, totalWords: words.length, wordsWithExamples: Object.keys(payload.words).length, totalExamples: all.length, corpusExamples: all.filter(x => x.englishSentenceId).length, aiGeneratedExamples: all.filter(x => !x.englishSentenceId).length };
-payload.editorialRevision = { id: "2026-09-learning-quality", metadataEdits, sentenceEdits, notice: "AI 修訂與逐筆文字檢查，不是人工核對；未修改的句子不因此取得品質保證。" };
+payload.stats = { ...payload.stats, totalWords: words.length, wordsWithExamples: Object.keys(payload.words).length, totalExamples: all.length, corpusExamples: all.length, aiGeneratedExamples: 0, sourceBackedWords: Object.keys(payload.words).length };
+payload.editorialRevision = { id: "2026-09-learning-quality", metadataEdits, sentenceEdits, skippedDraftEdits, notice: "AI 修訂與逐筆文字檢查，不是人工核對；未修改的句子不因此取得品質保證。公開資料只保留具明確來源的例句。" };
 fs.mkdirSync("outputs", { recursive: true });
 const archive = "outputs/bilingual-examples-before-editorial.json";
 if (!fs.existsSync(archive)) fs.writeFileSync(archive, raw);
 fs.writeFileSync(process.argv.includes("--apply") ? path : "outputs/bilingual-examples-editorial-preview.json", JSON.stringify(payload));
-console.log(JSON.stringify({ metadataEdits, sentenceEdits, totalExamples: all.length, applied: process.argv.includes("--apply") }));
+console.log(JSON.stringify({ metadataEdits, sentenceEdits, skippedDraftEdits, totalExamples: all.length, applied: process.argv.includes("--apply") }));

@@ -6,6 +6,8 @@ import WordDetails from "./WordDetails";
 import { isVerifiedEnrichmentRecord, VerifiedEnrichmentRecord } from "./enrichment";
 import { AiEnrichmentPayload, AiEnrichmentWord, isAiEnrichmentPayload } from "./aiEnrichment";
 import { BilingualExample, isBilingualExamplePayload } from "./bilingualExamples";
+import { SourceExample, isSourceExamplePayload } from "./sourceExamples";
+import { AiDraftExample, isAiDraftExamplePayload } from "./aiExampleFallbacks";
 import { buildWordFamilyMap } from "./wordEnhancements";
 import { parseMeaningGroups } from "./meaningGroups";
 import { applyMeaningEditorial, isPrimaryMeaning } from "./meaningEditorial";
@@ -111,16 +113,6 @@ function speak(text: string, lang: "en-US" | "zh-TW", speed: SpeechSpeed) {
   window.speechSynthesis.speak(utterance);
 }
 
-function formatDate(dateString: string, offset: number) {
-  const date = new Date(`${dateString}T00:00:00`);
-  date.setDate(date.getDate() + offset);
-  return new Intl.DateTimeFormat("zh-TW", {
-    month: "long",
-    day: "numeric",
-    weekday: "short",
-  }).format(date);
-}
-
 function dateValueWithOffset(dateString: string, offset: number) {
   const date = new Date(`${dateString}T12:00:00`);
   date.setDate(date.getDate() + offset);
@@ -163,6 +155,8 @@ export default function Home() {
   const [aiGlosses, setAiGlosses] = useState<Record<string, string>>({});
   const [aiEnrichmentMeta, setAiEnrichmentMeta] = useState<Pick<AiEnrichmentPayload, "notice" | "source"> | null>(null);
   const [bilingualExamples, setBilingualExamples] = useState<Record<string, BilingualExample[]>>({});
+  const [sourceExamples, setSourceExamples] = useState<Record<string, SourceExample[]>>({});
+  const [aiDraftExamples, setAiDraftExamples] = useState<Record<string, AiDraftExample[]>>({});
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(() => typeof window === "undefined" ? null : window.__vocabflowInstallPrompt);
   const [pwaFeedback, setPwaFeedback] = useState<PwaFeedback>(null);
   const [query, setQuery] = useState("");
@@ -190,11 +184,13 @@ export default function Home() {
       fetch(`${BASE_PATH}/enrichment.json`).then((res) => res.json()),
       fetch(`${BASE_PATH}/enrichment-ai.json`).then((res) => res.json()),
       fetch(`${BASE_PATH}/bilingual-examples.json`).then((res) => res.json()),
+      fetch(`${BASE_PATH}/source-examples.json`).then((res) => res.ok ? res.json() : null).catch(() => null),
+      fetch(`${BASE_PATH}/ai-example-fallbacks.json`).then((res) => res.ok ? res.json() : null).catch(() => null),
       Promise.resolve().then(() => localStorage.getItem(STORAGE_KEY)),
       Promise.resolve().then(() => localStorage.getItem(SETTINGS_KEY)),
       Promise.resolve().then(() => localStorage.getItem(QUIZ_HISTORY_KEY)),
       Promise.resolve().then(() => localStorage.getItem(NOTES_KEY)),
-    ]).then(([data, enrichment, aiData, exampleData, savedStatuses, savedSettings, savedQuizHistory, savedNotes]) => {
+    ]).then(([data, enrichment, aiData, exampleData, sourceExampleData, aiDraftExampleData, savedStatuses, savedSettings, savedQuizHistory, savedNotes]) => {
       setWords((data as Word[]).map(applyMeaningEditorial));
       if (enrichment && typeof enrichment === "object" && (enrichment as { schemaVersion?: unknown }).schemaVersion === 1) {
         const candidateRecords = (enrichment as { records?: unknown }).records;
@@ -207,6 +203,12 @@ export default function Home() {
       }
       if (isBilingualExamplePayload(exampleData)) {
         setBilingualExamples(exampleData.words);
+      }
+      if (isSourceExamplePayload(sourceExampleData)) {
+        setSourceExamples(sourceExampleData.words);
+      }
+      if (isAiDraftExamplePayload(aiDraftExampleData)) {
+        setAiDraftExamples(aiDraftExampleData.words);
       }
       if (savedStatuses) setStatuses(JSON.parse(savedStatuses));
       if (savedSettings) {
@@ -337,8 +339,13 @@ export default function Home() {
     unknown: Object.values(statuses).filter((s) => s === "unknown").length,
   }), [statuses]);
 
-  const dayDone = dayWords.filter((word) => statuses[word.id]).length;
-  const progress = dayWords.length ? Math.round((dayDone / dayWords.length) * 100) : 0;
+  const sourceCoverage = useMemo(() => {
+    const ids = new Set(Object.entries(bilingualExamples)
+      .filter(([, records]) => records.some((record) => (record.sourceType === "tatoeba" || record.sourceType === "open-wordnet") && record.qualityScore >= 40))
+      .map(([id]) => id));
+    Object.keys(sourceExamples).forEach((id) => ids.add(id));
+    return ids.size;
+  }, [bilingualExamples, sourceExamples]);
 
   function mark(id: number, status: WordStatus) {
     setStatuses((current) => ({ ...current, [id]: status }));
@@ -514,7 +521,7 @@ export default function Home() {
         <section className="hero">
           <div>
             <p className="eyebrow">YOUR DAILY VOCABULARY</p>
-            <p className="hero-description">每天混合第 1–6 級單字；完成標記會自動保存在這台裝置。</p>
+            <p className="hero-description">每天混合第 1–6 級單字；資料會自動保存在這台裝置。</p>
           </div>
           <div className="day-controls">
             <div className="day-switcher" aria-label="切換學習天數">
@@ -538,14 +545,6 @@ export default function Home() {
         </section>
 
         <section className="dashboard-grid">
-          <div className="progress-card">
-            <div className="progress-heading">
-              <div><span>今日完成度</span><strong>{dayDone} / {dayWords.length}</strong></div>
-              <b>{progress}%</b>
-            </div>
-            <div className="progress-track"><i style={{ width: `${progress}%` }} /></div>
-            <p>{formatDate(startDate, safeDay - 1)} · 第 {safeDay} 天學習內容</p>
-          </div>
           <div className="stat-card known"><span>✓</span><div><small>已熟悉</small><strong>{allCounts.known}</strong></div></div>
           <div className="stat-card review"><span>↻</span><div><small>待複習</small><strong>{allCounts.review}</strong></div></div>
           <div className="stat-card unknown"><span>!</span><div><small>不熟</small><strong>{allCounts.unknown}</strong></div></div>
@@ -651,6 +650,8 @@ export default function Home() {
                   aiMeta={aiEnrichmentMeta}
                   aiGlosses={aiGlosses}
                   examples={bilingualExamples[String(word.id)] ?? []}
+                  sourceExamples={sourceExamples[String(word.id)] ?? []}
+                  aiFallbackExamples={aiDraftExamples[String(word.id)] ?? []}
                   personalNote={wordNotes[word.id] ?? ""}
                   onNoteChange={updateWordNote}
                 />
@@ -757,7 +758,7 @@ export default function Home() {
             <div className="info-block"><strong>6,004 個官方詞條</strong><p>英文詞彙、詞性與六級分級來自大學入學考試中心《高中英文參考詞彙表（111學年度起適用）》。</p></div>
             <div className="info-block"><strong>中文不是大考中心官方翻譯</strong><p>中文釋義與音標由原 Excel 中的開源 ECDICT 英漢字典資料補充。</p></div>
             <div className="info-block"><strong>字義依用途分類，不標主次</strong><p>中文解釋依詞性分組，法律、醫學、化學、電腦等專業補充另列；不再以粗體推測哪個意思較常用。</p></div>
-            <div className="info-block"><strong>6,004 詞皆有完整雙語例句</strong><p>優先使用經嚴格篩選的 Tatoeba 英中句對；缺漏詞條由本機 AI 依主要詞義補句並通過格式檢查。粗體只標示句中的英文目標詞與中文對應詞，AI 補句會另行標示。</p></div>
+            <div className="info-block"><strong>來源與品質優先的例句</strong><p>目前有 {sourceCoverage} / {words.length} 個詞條具備可公開來源的 Tatoeba 雙語句或 Open English Wordnet 英文用例；其餘詞條會顯示明確標示的 AI 造句草稿。Tatoeba 雙語句只顯示自動品質分數至少 40 的紀錄；分數依句子完整度、目標詞對齊、長度與翻譯覆蓋計算，不是人工評分。公開來源句保留授權連結，AI 草稿不會冒充字典原句。Oxford、Cambridge 等出版社原句必須透過正式 API／授權取得，未授權前只提供查閱連結。</p></div>
             <div className="info-block"><strong>每日混合六級與不同字首</strong><p>每天固定安排 50 詞，第 1–6 級各約 8–9 詞，並分散不同英文字母開頭；卡片的 1–50 是當日學習順序。因官方總數為 6,004，第 121 天是剩餘的最後 4 詞。</p></div>
             <a className="source-link" href="https://www.ceec.edu.tw/files/file_pool/1/0k213571061045122620/%E9%AB%98%E4%B8%AD%E8%8B%B1%E6%96%87%E5%8F%83%E8%80%83%E8%A9%9E%E5%BD%99%E8%A1%A8%28111%E5%AD%B8%E5%B9%B4%E5%BA%A6%E8%B5%B7%E9%81%A9%E7%94%A8%29.pdf" target="_blank" rel="noreferrer">查看大考中心原始詞彙表 ↗</a>
           </section>

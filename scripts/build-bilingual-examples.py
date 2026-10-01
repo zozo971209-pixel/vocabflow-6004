@@ -310,6 +310,13 @@ def main() -> None:
                             "enStart": match.start(), "enEnd": match.end(), "zhStart": zh_start, "zhEnd": zh_end,
                             "targetEn": match.group(0), "targetZh": target_zh, "senseZh": target_zh, "pos": pos,
                             "qualityScore": min(100, max(1, round((quality_score - 120) / 1.4))),
+                            "origin": "tatoeba",
+                            "sourceType": "tatoeba",
+                            "sourceTitle": "Tatoeba",
+                            "sourceUrl": f"https://tatoeba.org/en/sentences/show/{numeric_id}",
+                            "sourceLicense": "CC BY 2.0 FR",
+                            "sourceLicenseUrl": "https://creativecommons.org/licenses/by/2.0/fr/",
+                            "reviewStatus": "source-backed",
                             "englishSentenceId": numeric_id, "chineseSentenceId": chinese_id,
                         }
                         selections[word_id].append((quality_score, record))
@@ -338,7 +345,7 @@ def main() -> None:
         "schemaVersion": 2, "generatedAt": date.today().isoformat(),
         "notice": "例句取自 Tatoeba 英中句對，已通過完整句、臺灣繁中、詞義對應、難度、自然度與重複度等自動品質檢查；本站以自動嚴格篩選取代逐句人工核對。",
         "source": {"title": "Tatoeba", "url": "https://tatoeba.org/", "license": "CC BY 2.0 FR", "licenseUrl": "https://creativecommons.org/licenses/by/2.0/fr/"},
-        "stats": {"totalWords": len(vocab), "wordsWithExamples": len(words), "totalExamples": total_examples}, "words": words,
+        "stats": {"totalWords": len(vocab), "wordsWithExamples": len(words), "totalExamples": total_examples, "sourceBackedWords": len(words)}, "words": words,
     }
     OUTPUT_PATH.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(json.dumps(payload["stats"], ensure_ascii=False))

@@ -1,7 +1,7 @@
-"""Fill words without a corpus example by using a local Ollama model.
+"""Create local AI example drafts for words without a source-backed example.
 
-The script is resumable. Intermediate accepted records are saved under outputs,
-then merged into public/bilingual-examples.json after every successful batch.
+The script is resumable. Accepted records are saved under outputs and are kept
+out of the public static payload until they have an explicit source review.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ VOCAB_PATH = ROOT / "public" / "vocab.json"
 ENRICHMENT_PATH = ROOT / "public" / "enrichment-ai.json"
 EXAMPLE_PATH = ROOT / "public" / "bilingual-examples.json"
 CACHE_PATH = ROOT / "outputs" / "ai-example-cache.json"
+DRAFT_OUTPUT_PATH = ROOT / "outputs" / "ai-example-drafts.json"
 TOKEN_RE = re.compile(r"[A-Za-z]+(?:['’-][A-Za-z]+)*")
 HAN_RE = re.compile(r"[\u3400-\u9fff]")
 TERMINAL_EN_RE = re.compile(r"[.!?]$")
@@ -158,7 +159,8 @@ def validate(raw: dict[str, object], expected: dict[str, object], converter: Ope
             "zhStart": zh_start, "zhEnd": zh_start + len(target_zh),
             "targetEn": en[en_match.start():en_match.end()], "targetZh": target_zh,
             "senseZh": target_zh, "pos": str(raw.get("pos", "")).strip().lower().rstrip("."),
-            "qualityScore": 80, "origin": "ai-generated",
+            "qualityScore": 80, "origin": "ai-generated", "sourceType": "ai-draft",
+            "reviewStatus": "ai-draft",
         }
     except (KeyError, TypeError, ValueError):
         return None
@@ -167,15 +169,26 @@ def validate(raw: dict[str, object], expected: dict[str, object], converter: Ope
 def save(cache: dict[str, dict[str, object]], examples: dict[str, object]) -> None:
     CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
     CACHE_PATH.write_text(json.dumps(cache, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    for word_id, record in cache.items():
-        examples["words"].setdefault(word_id, [record])
+    DRAFT_OUTPUT_PATH.write_text(json.dumps({
+        "schemaVersion": 1,
+        "notice": "本檔案只供本機審核與編輯；AI 草稿不會自動發布到公開網站。",
+        "words": {word_id: [record] for word_id, record in cache.items()},
+    }, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     examples["schemaVersion"] = 2
-    examples["notice"] = "例句優先取自 Tatoeba；缺少可靠句對的詞條由本機 AI 依主要詞義造句。全部例句均通過完整性、臺灣繁中、目標詞位置、長度與格式自動檢查，未經人工逐句核對。"
+    examples["notice"] = "公開雙語例句只包含具明確來源與授權標記的來源資料；本機 AI 補句只保留在 outputs/ 作為待審草稿，不會自動發布。"
+    source_types = {"tatoeba", "open-wordnet"}
+    published_words = {
+        word_id: [record for record in records if record.get("sourceType") in source_types]
+        for word_id, records in examples["words"].items()
+    }
+    examples["words"] = {word_id: records for word_id, records in published_words.items() if records}
     all_records = [record for records in examples["words"].values() for record in records]
     examples["stats"] = {
         "totalWords": 6004, "wordsWithExamples": len(examples["words"]), "totalExamples": len(all_records),
-        "corpusExamples": sum(record.get("origin", "tatoeba") != "ai-generated" for record in all_records),
-        "aiGeneratedExamples": sum(record.get("origin") == "ai-generated" for record in all_records),
+        "corpusExamples": len(all_records),
+        "aiGeneratedExamples": 0,
+        "sourceBackedWords": len(examples["words"]),
+        "draftExamplesArchived": len(cache),
     }
     EXAMPLE_PATH.write_text(json.dumps(examples, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 

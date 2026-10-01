@@ -4,7 +4,9 @@ import { irregularFormFor } from "./wordEnhancements";
 import { EnrichmentCategory, VerifiedEnrichmentRecord } from "./enrichment";
 import { AiEnrichmentPayload, AiEnrichmentWord } from "./aiEnrichment";
 import { BilingualExample } from "./bilingualExamples";
-import { contentEditorial, editedEnrichment, editedExamples } from "./contentEditorial";
+import { SourceExample } from "./sourceExamples";
+import { AiDraftExample } from "./aiExampleFallbacks";
+import { contentEditorial, editedEnrichment } from "./contentEditorial";
 
 type Props = {
   wordId: number;
@@ -15,6 +17,8 @@ type Props = {
   aiMeta: Pick<AiEnrichmentPayload, "notice" | "source"> | null;
   aiGlosses: Record<string, string>;
   examples: BilingualExample[];
+  sourceExamples: SourceExample[];
+  aiFallbackExamples: AiDraftExample[];
   personalNote: string;
   onNoteChange: (wordId: number, note: string) => void;
 };
@@ -57,9 +61,29 @@ function HighlightedText({ text, start, end }: { text: string; start: number; en
   return <>{text.slice(0, start)}<strong className="example-target">{text.slice(start, end)}</strong>{text.slice(end)}</>;
 }
 
-export default function WordDetails({ wordId, word, family, records, aiData: originalAiData, aiMeta, aiGlosses: originalGlosses, examples: originalExamples, personalNote, onNoteChange }: Props) {
+function sourceForExample(example: BilingualExample | SourceExample) {
+  if (("origin" in example && example.origin === "ai-generated") || example.sourceType === "ai-draft") {
+    return { label: "AI 草稿（不列為專業來源）", className: "example-source-ai", url: undefined };
+  }
+  if (example.sourceType === "open-wordnet") {
+    return { label: "Open English Wordnet · CC BY 4.0", className: "example-source-open", url: example.sourceUrl ?? "https://en-word.net/" };
+  }
+  const id = "englishSentenceId" in example ? example.englishSentenceId : undefined;
+  return { label: "Tatoeba · CC BY 2.0 FR", className: "example-source-tatoeba", url: example.sourceUrl ?? (id ? `https://tatoeba.org/en/sentences/show/${id}` : "https://tatoeba.org/") };
+}
+
+function sourceTargetSpan(example: SourceExample) {
+  const start = example.en.toLowerCase().indexOf(example.targetEn.toLowerCase());
+  return { start, end: start >= 0 ? start + example.targetEn.length : -1 };
+}
+
+export default function WordDetails({ wordId, word, family, records, aiData: originalAiData, aiMeta, aiGlosses: originalGlosses, examples: originalExamples, sourceExamples, aiFallbackExamples, personalNote, onNoteChange }: Props) {
   const aiData = editedEnrichment(wordId, originalAiData);
-  const examples = editedExamples(wordId) ?? originalExamples;
+  // The public payload is source-only; AI editorial examples stay out of the sentence area.
+  const sourceBackedExamples = originalExamples.filter((example) =>
+    (example.sourceType === "tatoeba" || example.sourceType === "open-wordnet") && example.qualityScore >= 40,
+  );
+  const hasSourceExamples = sourceBackedExamples.length > 0 || sourceExamples.length > 0;
   const aiGlosses = (key: string) => aiData?.glosses?.[key] ?? originalGlosses[key];
   const irregular = irregularFormFor(word);
   const verifiedFamily = records.filter((record) => record.category === "word_family");
@@ -99,12 +123,28 @@ export default function WordDetails({ wordId, word, family, records, aiData: ori
         <section>
           <h4>例句與造句提示</h4>
           <VerifiedItems records={verifiedFor(records, ["example"])} />
-          {examples.length ? <div className="ai-example-list">{examples.map((example) => (
-            <p key={example.englishSentenceId ? `${example.englishSentenceId}-${example.chineseSentenceId}` : `ai-${wordId}-${example.en}`}>
+          {sourceBackedExamples.length ? <div className="ai-example-list">{sourceBackedExamples.map((example) => {
+            const source = sourceForExample(example);
+            return <p key={example.englishSentenceId ? `${example.englishSentenceId}-${example.chineseSentenceId}` : `${wordId}-${example.en}`}>
               <span className="example-english"><HighlightedText text={example.en} start={example.enStart} end={example.enEnd} /></span>
               <small className="example-translation"><HighlightedText text={example.zh} start={example.zhStart} end={example.zhEnd} /></small>
-            </p>
-          ))}</div> : <p className="detail-empty">目前沒有通過完整雙語與目標詞對應檢查的例句。</p>}
+              <small className={`example-source ${source.className}`}>來源：{source.url ? <a href={source.url} target="_blank" rel="noreferrer">{source.label}</a> : source.label}</small>
+            </p>;
+          })}</div> : hasSourceExamples ? null : aiFallbackExamples.length ? <div className="ai-example-list ai-draft-example-list"><p className="ai-draft-warning">AI 造句草稿：僅供學習參考，非字典原句，尚未人工逐句核對。</p>{aiFallbackExamples.map((example) => <p key={`${wordId}-${example.en}`}>
+            <span className="example-english"><HighlightedText text={example.en} start={example.enStart} end={example.enEnd} /></span>
+            <small className="example-translation"><HighlightedText text={example.zh} start={example.zhStart} end={example.zhEnd} /></small>
+            <small className="example-source example-source-ai">來源：本機 AI 草稿（非外部字典來源）</small>
+          </p>)}</div> : <div className="detail-empty example-missing-source"><p>目前沒有合格的公開來源例句，也沒有可用的 AI 草稿。</p><small>可先查閱 <a href={`https://www.oxfordlearnersdictionaries.com/definition/english/${encodeURIComponent(word.toLowerCase())}`} target="_blank" rel="noreferrer">Oxford Learner’s Dictionaries</a> 或 <a href={`https://dictionary.cambridge.org/dictionary/english/${encodeURIComponent(word.toLowerCase())}`} target="_blank" rel="noreferrer">Cambridge Dictionary</a>。</small></div>}
+          {sourceExamples.length ? <div className="source-example-list"><p className="detail-label">專業來源英文用例</p>{sourceExamples.map((example) => {
+            const span = sourceTargetSpan(example);
+            const source = sourceForExample(example);
+            return <p className="source-example-item" key={`${wordId}-${example.en}`}>
+              <span className="example-english"><HighlightedText text={example.en} start={span.start} end={span.end} /></span>
+              <small className="source-example-kind">{example.exampleKind === "sentence" ? "完整句" : "詞典用例片語"}</small>
+              <small className="source-translation-note">中文翻譯未隨 Wordnet 原始資料提供；保留英文原文，避免自動翻譯冒充來源內容。</small>
+              <small className={`example-source ${source.className}`}>來源：<a href={source.url} target="_blank" rel="noreferrer">{source.label}</a></small>
+            </p>;
+          })}</div> : null}
           {aiData?.definitions.length ? <p className="definition-note">詞典英文釋義：{aiData.definitions.join("；")}</p> : null}
         </section>
         <section>
