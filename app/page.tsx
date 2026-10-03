@@ -149,7 +149,6 @@ export default function Home() {
   const importInputRef = useRef<HTMLInputElement>(null);
   const readingPositions = useRef<Record<string, number>>({});
   const pendingReadingPosition = useRef<number | null>(null);
-  const pendingWordId = useRef<number | null>(null);
   const [words, setWords] = useState<Word[]>([]);
   const [statuses, setStatuses] = useState<StatusMap>({});
   const [currentDay, setCurrentDay] = useState(1);
@@ -176,6 +175,7 @@ export default function Home() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
+  const [quizAutoStart, setQuizAutoStart] = useState(false);
   const [quizHistory, setQuizHistory] = useState<QuizHistoryEntry[]>([]);
   const [reviewRecords, setReviewRecords] = useState<ReviewMap>({});
   const [favorites, setFavorites] = useState<Set<number>>(new Set());
@@ -326,13 +326,6 @@ export default function Home() {
     const frame = requestAnimationFrame(() => window.scrollTo({ top, behavior: "instant" }));
     return () => cancelAnimationFrame(frame);
   }, [safeDay]);
-  useEffect(() => {
-    if (pendingWordId.current === null) return;
-    const id = pendingWordId.current;
-    pendingWordId.current = null;
-    const frame = requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-word-id="${id}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
-    return () => cancelAnimationFrame(frame);
-  }, [safeDay]);
   const selectedLearningDate = dateValueWithOffset(startDate, safeDay - 1);
   const planEndDate = dateValueWithOffset(startDate, totalDays - 1);
   const dayWords = useMemo(() => {
@@ -401,20 +394,10 @@ export default function Home() {
     });
   }
 
-  function openQuiz(preset: { words: Word[]; label: string } | null = null) {
+  function openQuiz(preset: { words: Word[]; label: string } | null = null, autoStart = false) {
     setQuizPreset(preset);
+    setQuizAutoStart(autoStart);
     setQuizOpen(true);
-  }
-
-  function resumeReading() {
-    if (!lastWordId) return;
-    const targetIndex = words.findIndex(word => word.id === lastWordId);
-    if (targetIndex < 0) return;
-    const targetDay = Math.ceil((targetIndex + 1) / WORDS_PER_DAY);
-    pendingReadingPosition.current = null;
-    pendingWordId.current = lastWordId;
-    if (targetDay === safeDay) requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-word-id="${lastWordId}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
-    else setCurrentDay(targetDay);
   }
 
   function completeQuiz(entry: QuizHistoryEntry) {
@@ -590,7 +573,7 @@ export default function Home() {
         <section className="study-overview" aria-label="學習日與累積進度">
           <div className="day-switcher" aria-label="切換學習天數">
             <button onClick={() => changeDay(safeDay - 1)} disabled={safeDay <= 1} aria-label="前一天">←</button>
-            <div><small>目前學習日</small><strong>Day {safeDay} <span>/ {totalDays}</span></strong></div>
+            <div><small>目前學習日</small><strong>Day {safeDay}</strong></div>
             <button onClick={() => changeDay(safeDay + 1)} disabled={safeDay >= totalDays} aria-label="後一天">→</button>
           </div>
           <div className="date-jump">
@@ -602,8 +585,8 @@ export default function Home() {
             {(Object.keys(statusMeta) as WordStatus[]).map(status => <button key={status} className={status} onClick={() => { setSearchDayMode("all"); setStatusFilter(status); }}><span>{statusMeta[status].icon}</span>{statusMeta[status].label}<strong>{allCounts[status]}</strong></button>)}
           </div>
           <div className="overview-actions">
-            {lastWordId && <button className="resume-button" onClick={resumeReading}>↳ 接續 #{lastWordId}</button>}
-            <button className="due-button" disabled={!dueIds.length} onClick={() => openQuiz({ words: words.filter(word => dueIds.includes(word.id)), label: "今日到期複習" })}>↻ 到期 {dueIds.length}</button>
+            <button className="resume-button" onClick={() => { setQuery(""); setLevelFilter(0); setStatusFilter("all"); setSearchDayMode("all"); setFavoriteOnly(true); }}>★ 收藏 {favorites.size}</button>
+            <button className="due-button" onClick={() => openQuiz(null, true)}>✦ 測驗</button>
           </div>
         </section>
 
@@ -743,7 +726,7 @@ export default function Home() {
         {!query && searchDayMode === "today" && (
           <nav className="bottom-nav" aria-label="前後天切換">
             <button onClick={() => changeDay(safeDay - 1)} disabled={safeDay <= 1}>← 前一天</button>
-            <span>Day {safeDay} / {totalDays}</span>
+            <span>Day {safeDay}</span>
             <button onClick={() => changeDay(safeDay + 1)} disabled={safeDay >= totalDays}>後一天 →</button>
           </nav>
         )}
@@ -847,8 +830,9 @@ export default function Home() {
           reviewIds={dueIds}
           presetWords={quizPreset?.words}
           presetLabel={quizPreset?.label}
+          autoStart={quizAutoStart}
           onComplete={completeQuiz}
-          onClose={() => { setQuizOpen(false); setQuizPreset(null); }}
+          onClose={() => { setQuizOpen(false); setQuizPreset(null); setQuizAutoStart(false); }}
         />
       )}
       {focusOpen && (

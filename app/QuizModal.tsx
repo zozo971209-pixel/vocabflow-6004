@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isChineseMeaningCorrect, isFillAnswerCorrect, fillAnswerFeedback } from "./quizAnswers";
 import {
   defaultQuizPreferences,
@@ -56,6 +56,7 @@ type Props = {
   reviewIds?: number[];
   presetWords?: QuizWord[];
   presetLabel?: string;
+  autoStart?: boolean;
   onComplete: (entry: QuizHistoryEntry) => void;
   onClose: () => void;
 };
@@ -170,7 +171,7 @@ function historyScope(entry: QuizHistoryEntry) {
   return `Day ${entry.startDay}${entry.endDay !== entry.startDay ? `–${entry.endDay}` : ""}`;
 }
 
-export default function QuizModal({ words, currentDay, totalDays, statuses, history, reviewIds = [], presetWords = [], presetLabel = "目前篩選結果", onComplete, onClose }: Props) {
+export default function QuizModal({ words, currentDay, totalDays, statuses, history, reviewIds = [], presetWords = [], presetLabel = "目前篩選結果", autoStart = false, onComplete, onClose }: Props) {
   const [initialPreferenceState] = useState(() => typeof window === "undefined"
     ? { preferences: defaultQuizPreferences(currentDay, totalDays), restored: false }
     : loadQuizPreferences(window.localStorage, currentDay, totalDays));
@@ -193,6 +194,7 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
   const [activeScope, setActiveScope] = useState<QuizHistoryEntry["scope"]>("today");
   const [preferenceFeedback, setPreferenceFeedback] = useState<"restored" | "saved" | "error" | null>(initialPreferenceState.restored ? "restored" : null);
   const [usePreset, setUsePreset] = useState(presetWords.length > 0);
+  const autoStarted = useRef(false);
 
   const effectiveStart = rangeMode === "today" ? currentDay : Math.min(startDay, endDay);
   const effectiveEnd = rangeMode === "today" ? currentDay : Math.max(startDay, endDay);
@@ -221,21 +223,7 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
       : selected === current.answer
   ));
 
-  useEffect(() => {
-    if (!current || !timerEnabled || selected || finished) return;
-    const timer = window.setTimeout(() => {
-      if (remainingSeconds <= 1) {
-        setRemainingSeconds(0);
-        setSelected(TIMEOUT_VALUE);
-        setWrongWordIds((ids) => ids.includes(current.word.id) ? ids : [...ids, current.word.id]);
-      } else {
-        setRemainingSeconds((value) => value - 1);
-      }
-    }, 1000);
-    return () => window.clearTimeout(timer);
-  }, [current, timerEnabled, selected, finished, remainingSeconds]);
-
-  function startQuiz(selectedWords = scope, retry = false) {
+  const startQuiz = useCallback((selectedWords = scope, retry = false) => {
     if (!retry) {
       try {
         saveQuizPreferences(window.localStorage, {
@@ -263,7 +251,27 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
     setWrongWordIds([]);
     setFinished(false);
     setRemainingSeconds(timerSeconds);
-  }
+  }, [scope, rangeMode, questionType, directionMode, statusFilters, startDay, endDay, timerEnabled, timerSeconds, usePreset, words]);
+
+  useEffect(() => {
+    if (!autoStart || autoStarted.current || !scope.length) return;
+    autoStarted.current = true;
+    startQuiz();
+  }, [autoStart, scope.length, startQuiz]);
+
+  useEffect(() => {
+    if (!current || !timerEnabled || selected || finished) return;
+    const timer = window.setTimeout(() => {
+      if (remainingSeconds <= 1) {
+        setRemainingSeconds(0);
+        setSelected(TIMEOUT_VALUE);
+        setWrongWordIds((ids) => ids.includes(current.word.id) ? ids : [...ids, current.word.id]);
+      } else {
+        setRemainingSeconds((value) => value - 1);
+      }
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [current, timerEnabled, selected, finished, remainingSeconds]);
 
   function answer(option: string) {
     if (selected || !current) return;

@@ -496,7 +496,8 @@ html[data-theme="dark"] input[type="date"] { color-scheme: dark; }
 .compact-stats .unknown span { color: var(--red); }
 .overview-actions { display: flex; gap: 7px; }
 .overview-actions button { padding: 8px 10px; white-space: nowrap; }
-.overview-actions .due-button:not(:disabled) { border-color: #f1cf98; color: #9a5c08; background: #fff9ef; }
+.overview-actions .resume-button { border-color: #eed37a; color: #8b6900; background: #fff9df; }
+.overview-actions .due-button { border-color: #c9c7ff; color: var(--indigo); background: #f4f3ff; }
 
 .toolbar { grid-template-columns: minmax(250px, 1.4fr) repeat(6, minmax(105px, .55fr)); gap: 8px; margin: 13px 0 15px; }
 .advanced-filters { display: contents; }
