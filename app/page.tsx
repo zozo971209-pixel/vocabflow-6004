@@ -3,6 +3,7 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import QuizModal, { QuizHistoryEntry, QuizWordStatus } from "./QuizModal";
 import WordDetails from "./WordDetails";
+import FocusStudy from "./FocusStudy";
 import { isVerifiedEnrichmentRecord, VerifiedEnrichmentRecord } from "./enrichment";
 import { AiEnrichmentWord, isAiEnrichmentPayload } from "./aiEnrichment";
 import { BilingualExample, isBilingualExamplePayload } from "./bilingualExamples";
@@ -50,6 +51,7 @@ const QUIZ_HISTORY_KEY = "vocab6004-quiz-history-v1";
 const SEARCH_PAGE_SIZE = 200;
 const NOTES_KEY = "vocab6004-notes-v1";
 const REVIEW_KEY = "vocab6004-review-v1";
+const FAVORITES_KEY = "vocab6004-favorites-v1";
 const UNDO_KEY = "vocab6004-import-undo-v1";
 const SPEECH_SPEED_VERSION = 3;
 const WORDS_PER_DAY = 50;
@@ -147,6 +149,7 @@ export default function Home() {
   const importInputRef = useRef<HTMLInputElement>(null);
   const readingPositions = useRef<Record<string, number>>({});
   const pendingReadingPosition = useRef<number | null>(null);
+  const pendingWordId = useRef<number | null>(null);
   const [words, setWords] = useState<Word[]>([]);
   const [statuses, setStatuses] = useState<StatusMap>({});
   const [currentDay, setCurrentDay] = useState(1);
@@ -175,6 +178,14 @@ export default function Home() {
   const [quizOpen, setQuizOpen] = useState(false);
   const [quizHistory, setQuizHistory] = useState<QuizHistoryEntry[]>([]);
   const [reviewRecords, setReviewRecords] = useState<ReviewMap>({});
+  const [favorites, setFavorites] = useState<Set<number>>(new Set());
+  const [favoriteOnly, setFavoriteOnly] = useState(false);
+  const [meaningsHidden, setMeaningsHidden] = useState(false);
+  const [revealedMeaningIds, setRevealedMeaningIds] = useState<Set<number>>(new Set());
+  const [lastWordId, setLastWordId] = useState<number | undefined>();
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [focusOpen, setFocusOpen] = useState(false);
+  const [quizPreset, setQuizPreset] = useState<{ words: Word[]; label: string } | null>(null);
   const [importPreview, setImportPreview] = useState<ReturnType<typeof parseProgressBackup> | null>(null);
   const [canUndo, setCanUndo] = useState(false);
   const [backupFeedback, setBackupFeedback] = useState<BackupFeedback>(null);
@@ -194,7 +205,8 @@ export default function Home() {
       Promise.resolve().then(() => localStorage.getItem(SETTINGS_KEY)),
       Promise.resolve().then(() => localStorage.getItem(QUIZ_HISTORY_KEY)),
       Promise.resolve().then(() => localStorage.getItem(NOTES_KEY)),
-    ]).then(([data, enrichment, aiData, exampleData, sourceExampleData, canonicalExampleData, savedStatuses, savedSettings, savedQuizHistory, savedNotes]) => {
+      Promise.resolve().then(() => localStorage.getItem(FAVORITES_KEY)),
+    ]).then(([data, enrichment, aiData, exampleData, sourceExampleData, canonicalExampleData, savedStatuses, savedSettings, savedQuizHistory, savedNotes, savedFavorites]) => {
       setWords(data as Word[]);
       if (enrichment && typeof enrichment === "object" && (enrichment as { schemaVersion?: unknown }).schemaVersion === 1) {
         const candidateRecords = (enrichment as { records?: unknown }).records;
@@ -221,9 +233,12 @@ export default function Home() {
         setSpeechSpeed(restoreSpeechSpeed(settings.speechSpeed, settings.speechSpeedVersion));
         setTheme(settings.theme === "dark" ? "dark" : "light");
         setFontSize(["small", "normal", "large"].includes(settings.fontSize) ? settings.fontSize : "normal");
+        setMeaningsHidden(settings.meaningsHidden === true);
+        if (typeof settings.lastWordId === "number") setLastWordId(settings.lastWordId);
       }
       if (savedQuizHistory) setQuizHistory(JSON.parse(savedQuizHistory));
       if (savedNotes) setWordNotes(JSON.parse(savedNotes));
+      if (savedFavorites) setFavorites(new Set(JSON.parse(savedFavorites)));
       setCanUndo(Boolean(localStorage.getItem(UNDO_KEY)));
       const savedReviews = localStorage.getItem(REVIEW_KEY);
       if (savedReviews) setReviewRecords(JSON.parse(savedReviews));
@@ -246,14 +261,14 @@ export default function Home() {
     Promise.resolve().then(() => {
       if (!active) return;
       try {
-        persistProgress(localStorage, { statuses, settings: { currentDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize }, quizHistory, notes: wordNotes, reviews: reviewRecords });
+        persistProgress(localStorage, { statuses, settings: { currentDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize, meaningsHidden, lastWordId }, quizHistory, notes: wordNotes, reviews: reviewRecords, favorites: [...favorites] });
         setStorageError("");
       } catch (error) {
         setStorageError(error instanceof Error ? error.message : "紀錄儲存失敗，請先匯出備份。");
       }
     });
     return () => { active = false; };
-  }, [statuses, currentDay, startDate, speechSpeed, theme, fontSize, quizHistory, wordNotes, reviewRecords, loaded]);
+  }, [statuses, currentDay, startDate, speechSpeed, theme, fontSize, quizHistory, wordNotes, reviewRecords, favorites, meaningsHidden, lastWordId, loaded]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -269,7 +284,7 @@ export default function Home() {
     };
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
-      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=23`, { scope: `${BASE_PATH}/`, updateViaCache: "none" })
+      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=24`, { scope: `${BASE_PATH}/`, updateViaCache: "none" })
         .then((registration) => { registration.update().catch(() => undefined); })
         .catch(() => {
           setPwaFeedback({ type: "error", text: "離線功能註冊失敗，請確認網路後重新整理。現有進度不受影響。" });
@@ -311,6 +326,13 @@ export default function Home() {
     const frame = requestAnimationFrame(() => window.scrollTo({ top, behavior: "instant" }));
     return () => cancelAnimationFrame(frame);
   }, [safeDay]);
+  useEffect(() => {
+    if (pendingWordId.current === null) return;
+    const id = pendingWordId.current;
+    pendingWordId.current = null;
+    const frame = requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-word-id="${id}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    return () => cancelAnimationFrame(frame);
+  }, [safeDay]);
   const selectedLearningDate = dateValueWithOffset(startDate, safeDay - 1);
   const planEndDate = dateValueWithOffset(startDate, totalDays - 1);
   const dayWords = useMemo(() => {
@@ -333,11 +355,12 @@ export default function Home() {
       const matchesStatus = statusFilter === "all" ||
         (statusFilter === "unmarked" ? !statuses[word.id] : statuses[word.id] === statusFilter);
       const matchesLevel = levelFilter === 0 || word.level === levelFilter;
-      return matchesQuery && matchesStatus && matchesLevel;
+      const matchesFavorite = !favoriteOnly || favorites.has(word.id);
+      return matchesQuery && matchesStatus && matchesLevel && matchesFavorite;
     });
-  }, [query, words, dayWords, searchDayMode, safeSearchStart, safeSearchEnd, statusFilter, levelFilter, statuses]);
+  }, [query, words, dayWords, searchDayMode, safeSearchStart, safeSearchEnd, statusFilter, levelFilter, statuses, favoriteOnly, favorites]);
   const filteredWords = filteredMatches.slice(0, visibleResultCount);
-  const isFilteredView = Boolean(query) || searchDayMode !== "today" || statusFilter !== "all" || levelFilter !== 0;
+  const isFilteredView = Boolean(query) || searchDayMode !== "today" || statusFilter !== "all" || levelFilter !== 0 || favoriteOnly;
   const searchScopeLabel = searchDayMode === "all"
     ? "全部天數"
     : searchDayMode === "range"
@@ -351,10 +374,47 @@ export default function Home() {
   }), [statuses]);
 
   const canonicalCoverage = Object.keys(canonicalExamples).length;
+  const dueIds = useMemo(() => dueReviewIds(reviewRecords), [reviewRecords]);
+
+  useEffect(() => {
+    const cards = document.querySelectorAll<HTMLElement>(".word-card[data-word-id]");
+    if (!cards.length) return;
+    const observer = new IntersectionObserver(entries => {
+      const visible = entries.filter(entry => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+      const id = visible?.target.getAttribute("data-word-id");
+      if (id) setLastWordId(Number(id));
+    }, { threshold: [0.55, 0.8] });
+    cards.forEach(card => observer.observe(card));
+    return () => observer.disconnect();
+  }, [safeDay, query, statusFilter, levelFilter, searchDayMode, safeSearchStart, safeSearchEnd, favoriteOnly, visibleResultCount]);
 
   function mark(id: number, status: WordStatus) {
     setStatuses((current) => ({ ...current, [id]: status }));
     setReviewRecords(current => ({ ...current, [id]: scheduleReview(current[id], status === "known") }));
+  }
+
+  function toggleFavorite(id: number) {
+    setFavorites(current => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function openQuiz(preset: { words: Word[]; label: string } | null = null) {
+    setQuizPreset(preset);
+    setQuizOpen(true);
+  }
+
+  function resumeReading() {
+    if (!lastWordId) return;
+    const targetIndex = words.findIndex(word => word.id === lastWordId);
+    if (targetIndex < 0) return;
+    const targetDay = Math.ceil((targetIndex + 1) / WORDS_PER_DAY);
+    pendingReadingPosition.current = null;
+    pendingWordId.current = lastWordId;
+    if (targetDay === safeDay) requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-word-id="${lastWordId}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    else setCurrentDay(targetDay);
   }
 
   function completeQuiz(entry: QuizHistoryEntry) {
@@ -423,10 +483,11 @@ export default function Home() {
       app: "詞序 VocabFlow",
       progress: {
         statuses,
-        settings: { currentDay: safeDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize },
+        settings: { currentDay: safeDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize, meaningsHidden, lastWordId },
         quizHistory,
         notes: wordNotes,
         reviews: reviewRecords,
+        favorites: [...favorites],
       },
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
@@ -442,7 +503,7 @@ export default function Home() {
   }
 
   function currentSnapshot(): ProgressSnapshot {
-    return { statuses, settings: { currentDay: safeDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize }, quizHistory, notes: wordNotes, reviews: reviewRecords };
+    return { statuses, settings: { currentDay: safeDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize, meaningsHidden, lastWordId }, quizHistory, notes: wordNotes, reviews: reviewRecords, favorites: [...favorites] };
   }
 
   function applySnapshot(next: ProgressSnapshot) {
@@ -452,9 +513,12 @@ export default function Home() {
     setSpeechSpeed(restoreSpeechSpeed(next.settings.speechSpeed, next.settings.speechSpeedVersion));
     setTheme(next.settings.theme);
     setFontSize(next.settings.fontSize);
+    setMeaningsHidden(next.settings.meaningsHidden === true);
+    setLastWordId(next.settings.lastWordId);
     setWordNotes(next.notes);
     setQuizHistory(next.quizHistory);
     setReviewRecords(next.reviews);
+    setFavorites(new Set(next.favorites));
   }
 
   async function importProgress(event: ChangeEvent<HTMLInputElement>) {
@@ -517,42 +581,30 @@ export default function Home() {
           <span><strong>詞序 VocabFlow</strong><small>高中英文每日學習</small></span>
         </a>
         <div className="top-actions">
-          <button className="primary-button" onClick={() => setQuizOpen(true)}>✦ 單字測驗</button>
+          <button className="primary-button" onClick={() => openQuiz()}>✦ 單字測驗</button>
           <button className="primary-button top-settings-button" onClick={() => setSettingsOpen(true)} aria-label="學習設定">⚙ 學習設定</button>
         </div>
       </header>
 
       <div className="page" id="top">
-        <section className="hero">
-          <div>
-            <p className="eyebrow">YOUR DAILY VOCABULARY</p>
-            <p className="hero-description">每天混合第 1–6 級單字；資料會自動保存在這台裝置。</p>
+        <section className="study-overview" aria-label="學習日與累積進度">
+          <div className="day-switcher" aria-label="切換學習天數">
+            <button onClick={() => changeDay(safeDay - 1)} disabled={safeDay <= 1} aria-label="前一天">←</button>
+            <div><small>目前學習日</small><strong>Day {safeDay} <span>/ {totalDays}</span></strong></div>
+            <button onClick={() => changeDay(safeDay + 1)} disabled={safeDay >= totalDays} aria-label="後一天">→</button>
           </div>
-          <div className="day-controls">
-            <div className="day-switcher" aria-label="切換學習天數">
-              <button onClick={() => changeDay(safeDay - 1)} disabled={safeDay <= 1} aria-label="前一天">←</button>
-              <div><small>目前進度</small><strong>Day {safeDay} <span>/ {totalDays}</span></strong></div>
-              <button onClick={() => changeDay(safeDay + 1)} disabled={safeDay >= totalDays} aria-label="後一天">→</button>
-            </div>
-            <div className="date-jump">
-              <label htmlFor="learning-date">直接選擇日期</label>
-              <input
-                id="learning-date"
-                type="date"
-                min={startDate}
-                max={planEndDate}
-                value={selectedLearningDate}
-                onChange={(event) => changeLearningDate(event.target.value)}
-              />
-              <button type="button" onClick={() => changeLearningDate(currentLocalDate())}>今天</button>
-            </div>
+          <div className="date-jump">
+            <label htmlFor="learning-date">日期</label>
+            <input id="learning-date" type="date" min={startDate} max={planEndDate} value={selectedLearningDate} onChange={(event) => changeLearningDate(event.target.value)} />
+            <button type="button" onClick={() => changeLearningDate(currentLocalDate())}>今天</button>
           </div>
-        </section>
-
-        <section className="dashboard-grid">
-          <div className="stat-card known"><span>✓</span><div><small>已熟悉</small><strong>{allCounts.known}</strong></div></div>
-          <div className="stat-card review"><span>↻</span><div><small>待複習</small><strong>{allCounts.review}</strong></div></div>
-          <div className="stat-card unknown"><span>!</span><div><small>不熟</small><strong>{allCounts.unknown}</strong></div></div>
+          <div className="compact-stats" aria-label="累積熟悉度">
+            {(Object.keys(statusMeta) as WordStatus[]).map(status => <button key={status} className={status} onClick={() => { setSearchDayMode("all"); setStatusFilter(status); }}><span>{statusMeta[status].icon}</span>{statusMeta[status].label}<strong>{allCounts[status]}</strong></button>)}
+          </div>
+          <div className="overview-actions">
+            {lastWordId && <button className="resume-button" onClick={resumeReading}>↳ 接續 #{lastWordId}</button>}
+            <button className="due-button" disabled={!dueIds.length} onClick={() => openQuiz({ words: words.filter(word => dueIds.includes(word.id)), label: "今日到期複習" })}>↻ 到期 {dueIds.length}</button>
+          </div>
         </section>
 
         <section className="toolbar" role="search" aria-label="搜尋與篩選單字">
@@ -570,10 +622,12 @@ export default function Home() {
                 setSearchEndDay(safeDay);
               }
             }} aria-label="選擇搜尋天數範圍">
-              <option value="today">今天（Day {safeDay}）</option>
+              <option value="today">目前學習日（Day {safeDay}）</option>
               <option value="all">全部天數</option>
               <option value="range">自訂 Day 範圍</option>
             </select></label>
+          <button className="filter-toggle" aria-expanded={filterPanelOpen} onClick={() => setFilterPanelOpen(open => !open)}>☷ 篩選</button>
+          <div className={`advanced-filters ${filterPanelOpen ? "open" : ""}`}>
           <label className="filter-field"><span>級別</span><select value={levelFilter} onChange={(e) => { setLevelFilter(Number(e.target.value)); setVisibleResultCount(SEARCH_PAGE_SIZE); }} aria-label="依官方級別篩選">
               <option value={0}>全部級別</option>
               {[1,2,3,4,5,6].map((level) => <option key={level} value={level}>第 {level} 級</option>)}
@@ -585,9 +639,12 @@ export default function Home() {
               <option value="unknown">不熟</option>
               <option value="unmarked">未標記</option>
             </select></label>
+          <button className={`favorite-filter ${favoriteOnly ? "active" : ""}`} aria-pressed={favoriteOnly} onClick={() => { setFavoriteOnly(value => !value); setVisibleResultCount(SEARCH_PAGE_SIZE); }}>★ 收藏 {favorites.size}</button>
+          </div>
           <button className="speech-mode" onClick={() => setSpeechSpeed(nextSpeechSpeed)} aria-label="切換朗讀速度">
             <span>▶</span>朗讀：{speechSpeed === "ultraSlow" ? "超慢速" : speechSpeed === "slow" ? "慢速" : "正常"}
           </button>
+          <button className={`meaning-visibility ${meaningsHidden ? "active" : ""}`} onClick={() => { setMeaningsHidden(value => !value); setRevealedMeaningIds(new Set()); }}>{meaningsHidden ? "顯示中文" : "隱藏中文"}</button>
           {searchDayMode === "range" && (
             <div className="search-day-range" role="group" aria-label="自訂搜尋天數範圍">
               <strong>自訂範圍</strong>
@@ -597,11 +654,22 @@ export default function Home() {
               <small>可自由輸入 1–{totalDays}，例如 Day 20 到 Day 23。</small>
             </div>
           )}
+          {isFilteredView && <div className="active-filters" aria-label="目前篩選條件">
+            {query && <button onClick={() => setQuery("")}>搜尋：{query} ×</button>}
+            {searchDayMode !== "today" && <button onClick={() => setSearchDayMode("today")}>{searchScopeLabel} ×</button>}
+            {levelFilter > 0 && <button onClick={() => setLevelFilter(0)}>第 {levelFilter} 級 ×</button>}
+            {statusFilter !== "all" && <button onClick={() => setStatusFilter("all")}>{statusFilter === "unmarked" ? "未標記" : statusMeta[statusFilter].label} ×</button>}
+            {favoriteOnly && <button onClick={() => setFavoriteOnly(false)}>收藏 ×</button>}
+            <button className="clear-filters" onClick={() => { setQuery(""); setSearchDayMode("today"); setLevelFilter(0); setStatusFilter("all"); setFavoriteOnly(false); }}>全部清除</button>
+          </div>}
         </section>
 
         <div className="list-heading">
           <div><p>{isFilteredView ? `${searchScopeLabel}搜尋結果` : `DAY ${safeDay} · TODAY'S WORDS`}</p><h2>{isFilteredView ? `找到 ${filteredMatches.length} 筆` : "今日單字"}</h2></div>
-          <p className="sorting-note">每日六級平均混合 · 固定 50 詞</p>
+          <div className="list-actions">
+            <button onClick={() => setFocusOpen(true)} disabled={!filteredMatches.length}>◎ 專注學習</button>
+            <button onClick={() => openQuiz({ words: filteredMatches, label: isFilteredView ? "目前篩選結果" : `Day ${safeDay} 單字` })} disabled={!filteredMatches.length}>✦ 測驗這 {filteredMatches.length} 詞</button>
+          </div>
         </div>
 
         <section className="word-grid" id="word-list" aria-live="polite">
@@ -609,16 +677,17 @@ export default function Home() {
             const status = statuses[word.id];
             const dayRank = words.indexOf(word) % WORDS_PER_DAY + 1;
             return (
-              <article className={`word-card ${status ? `is-${status}` : ""}`} key={word.id}>
+              <article className={`word-card ${status ? `is-${status}` : ""}`} key={word.id} data-word-id={word.id}>
                 <div className="card-topline">
                   <span className="rank">#{dayRank} 本日順序</span>
-                  <span className={`level level-${word.level}`}>LEVEL {word.level}</span>
+                  <div className="card-badges"><button className={`favorite-button ${favorites.has(word.id) ? "active" : ""}`} onClick={() => toggleFavorite(word.id)} aria-label={favorites.has(word.id) ? `取消收藏 ${word.word}` : `收藏 ${word.word}`}>★</button><span className={`level level-${word.level}`}>LEVEL {word.level}</span></div>
                 </div>
                 <div className="word-line">
                   <div><h3>{word.word}</h3><p>{word.pos} <span>{formatPhonetic(word.phonetic)}</span></p></div>
                   <button className="speak-button" onClick={() => speak(word.word, "en-US", speechSpeed)} aria-label={`朗讀 ${word.word}`}>▶<small>EN</small></button>
                 </div>
-                <div className="meaning">
+                <div className={`meaning ${meaningsHidden && !revealedMeaningIds.has(word.id) ? "is-hidden" : ""}`}>
+                  {meaningsHidden && !revealedMeaningIds.has(word.id) ? <button className="reveal-meaning" onClick={() => setRevealedMeaningIds(current => new Set(current).add(word.id))}>顯示中文意思</button> :
                   <div className="meaning-groups">
                     {parseMeaningGroups(word.meaning, word.pos).map((group) => (
                       <div className="meaning-group" key={group.key}>
@@ -636,7 +705,7 @@ export default function Home() {
                         ))}
                       </div>
                     ))}
-                  </div>
+                  </div>}
                 </div>
                 {word.note && <p className="note">備註：{word.note}</p>}
                 <div className="status-actions" role="group" aria-label={`${word.word} 的熟悉度`}>
@@ -738,7 +807,7 @@ export default function Home() {
               {importPreview && <div className="backup-preview" role="region" aria-label="匯入預覽">
                 <strong>匯入預覽</strong>
                 <p>備份時間：{importPreview.exportedAt ? new Date(importPreview.exportedAt).toLocaleString("zh-TW") : "未提供"}</p>
-                <p>{Object.keys(importPreview.progress.statuses).length} 個標記 · {Object.keys(importPreview.progress.notes).length} 則筆記 · {importPreview.progress.quizHistory.length} 次測驗 · {Object.keys(importPreview.progress.reviews).length} 個複習排程</p>
+                <p>{Object.keys(importPreview.progress.statuses).length} 個標記 · {importPreview.progress.favorites.length} 個收藏 · {Object.keys(importPreview.progress.notes).length} 則筆記 · {importPreview.progress.quizHistory.length} 次測驗 · {Object.keys(importPreview.progress.reviews).length} 個複習排程</p>
                 <p>合併：相同單字的標記、筆記與排程保留本機版本，設定不變。取代：使用備份中的全部紀錄與設定。兩者皆可復原。</p>
                 <div className="backup-actions">
                   <button className="backup-button" onClick={() => confirmImport("merge")}>合併紀錄</button>
@@ -775,9 +844,22 @@ export default function Home() {
           totalDays={totalDays}
           statuses={statuses}
           history={quizHistory}
-          reviewIds={dueReviewIds(reviewRecords)}
+          reviewIds={dueIds}
+          presetWords={quizPreset?.words}
+          presetLabel={quizPreset?.label}
           onComplete={completeQuiz}
-          onClose={() => setQuizOpen(false)}
+          onClose={() => { setQuizOpen(false); setQuizPreset(null); }}
+        />
+      )}
+      {focusOpen && (
+        <FocusStudy
+          words={filteredMatches}
+          statuses={statuses}
+          favorites={favorites}
+          onMark={mark}
+          onFavorite={toggleFavorite}
+          onSpeak={(word) => speak(word, "en-US", speechSpeed)}
+          onClose={() => setFocusOpen(false)}
         />
       )}
     </main>

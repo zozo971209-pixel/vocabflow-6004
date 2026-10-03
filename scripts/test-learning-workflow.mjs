@@ -30,7 +30,7 @@ assert(isFillAnswerCorrect("Apple!", "apple"));
 assert(isFillAnswerCorrect("colour", "color/colour"));
 assert(!isFillAnswerCorrect("apples", "apple"));
 assert(fillAnswerFeedback("apples", "apple", "zh-to-en").includes("詞形"));
-const current = { statuses: { 1: "known" }, notes: { 1: "本機筆記" }, reviews: { 1: first }, quizHistory: [], settings: { currentDay: 1, startDate: "2026-01-31", speechSpeed: "normal", speechSpeedVersion: 3, theme: "dark", fontSize: "large" } };
+const current = { statuses: { 1: "known" }, notes: { 1: "本機筆記" }, reviews: { 1: first }, favorites: [1], quizHistory: [], settings: { currentDay: 1, startDate: "2026-01-31", speechSpeed: "normal", speechSpeedVersion: 3, theme: "dark", fontSize: "large", meaningsHidden: true, lastWordId: 1 } };
 const incoming = { ...current, statuses: { 1: "unknown", 2: "review" }, notes: { 1: "匯入筆記", 2: "新增筆記" } };
 const envelope = progress => ({ format: "vocabflow-progress", version: 1, progress });
 const ids = new Set([1, 2, 3]);
@@ -41,13 +41,15 @@ assert.equal(merged.statuses[2], "review");
 assert.equal(merged.notes[1], "本機筆記");
 assert.equal(merged.notes[2], "新增筆記");
 assert.equal(merged.settings.theme, "dark");
+assert.deepEqual(merged.favorites, [1]);
 assert.throws(() => parseProgressBackup(envelope({ ...current, settings: { ...current.settings, startDate: "2026-02-31" } }), ids, 121));
 assert.throws(() => parseProgressBackup(envelope({ ...current, notes: { 1: 7 } }), ids, 121));
 assert.throws(() => parseProgressBackup(envelope({ ...current, quizHistory: [{ id: "bad", total: -1 }] }), ids, 121));
 assert.throws(() => parseProgressBackup(envelope({ ...current, reviews: { 1: { ...first, streak: -1 } } }), ids, 121));
-const legacy = { ...current }; delete legacy.notes; delete legacy.quizHistory; delete legacy.reviews;
+const legacy = { ...current }; delete legacy.notes; delete legacy.quizHistory; delete legacy.reviews; delete legacy.favorites;
 assert.deepEqual(parseProgressBackup(envelope(legacy), ids, 121).progress.notes, {});
 assert.deepEqual(parseProgressBackup(envelope(legacy), ids, 121).progress.reviews, {});
+assert.deepEqual(parseProgressBackup(envelope(legacy), ids, 121).progress.favorites, []);
 const saved = new Map();
 let failOnce = false;
 const fakeStorage = {
@@ -65,6 +67,7 @@ assert.throws(() => persistProgress(fakeStorage, { ...incoming, settings: { ...i
 assert.deepEqual([...saved], beforeFailure, "A partial write must restore every previous value");
 persistProgress(fakeStorage, incoming);
 assert.equal(JSON.parse(saved.get("vocab6004-progress-v1"))[2], "review");
+assert.deepEqual(JSON.parse(saved.get("vocab6004-favorites-v1")), [1]);
 const quizPreferences = {
   rangeMode: "custom",
   questionType: "fill",

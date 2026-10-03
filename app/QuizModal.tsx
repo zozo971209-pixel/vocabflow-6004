@@ -54,6 +54,8 @@ type Props = {
   statuses: Record<number, QuizWordStatus>;
   history: QuizHistoryEntry[];
   reviewIds?: number[];
+  presetWords?: QuizWord[];
+  presetLabel?: string;
   onComplete: (entry: QuizHistoryEntry) => void;
   onClose: () => void;
 };
@@ -168,7 +170,7 @@ function historyScope(entry: QuizHistoryEntry) {
   return `Day ${entry.startDay}${entry.endDay !== entry.startDay ? `–${entry.endDay}` : ""}`;
 }
 
-export default function QuizModal({ words, currentDay, totalDays, statuses, history, reviewIds = [], onComplete, onClose }: Props) {
+export default function QuizModal({ words, currentDay, totalDays, statuses, history, reviewIds = [], presetWords = [], presetLabel = "目前篩選結果", onComplete, onClose }: Props) {
   const [initialPreferenceState] = useState(() => typeof window === "undefined"
     ? { preferences: defaultQuizPreferences(currentDay, totalDays), restored: false }
     : loadQuizPreferences(window.localStorage, currentDay, totalDays));
@@ -190,10 +192,12 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
   const [remainingSeconds, setRemainingSeconds] = useState(initialPreferenceState.preferences.timerSeconds);
   const [activeScope, setActiveScope] = useState<QuizHistoryEntry["scope"]>("today");
   const [preferenceFeedback, setPreferenceFeedback] = useState<"restored" | "saved" | "error" | null>(initialPreferenceState.restored ? "restored" : null);
+  const [usePreset, setUsePreset] = useState(presetWords.length > 0);
 
   const effectiveStart = rangeMode === "today" ? currentDay : Math.min(startDay, endDay);
   const effectiveEnd = rangeMode === "today" ? currentDay : Math.max(startDay, endDay);
   const scope = useMemo(() => {
+    if (usePreset) return presetWords;
     const start = (effectiveStart - 1) * WORDS_PER_DAY;
     const unresolved = new Set<number>();
     const resolved = new Set<number>();
@@ -207,7 +211,7 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
     return statusFilters.length
       ? rangeWords.filter((word) => statusFilters.includes(statuses[word.id]))
       : rangeWords;
-  }, [effectiveStart, effectiveEnd, statusFilters, statuses, words, rangeMode, history, reviewIds]);
+  }, [effectiveStart, effectiveEnd, statusFilters, statuses, words, rangeMode, history, reviewIds, usePreset, presetWords]);
   const current = questions[questionIndex];
   const currentAnswerCorrect = Boolean(current && selected && selected !== TIMEOUT_VALUE && (
     questionType === "fill"
@@ -249,7 +253,7 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
         setPreferenceFeedback("error");
       }
     }
-    setActiveScope(retry ? "retry" : rangeMode);
+    setActiveScope(retry ? "retry" : usePreset ? "custom" : rangeMode);
     const nextQuestions = makeQuestions(selectedWords, words, directionMode, questionType);
     setQuestions(nextQuestions);
     setQuestionIndex(0);
@@ -342,6 +346,7 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
           <>
             <p className="eyebrow">VOCABULARY QUIZ</p>
             <h2 id="quiz-title">單字測驗</h2>
+            {usePreset && <div className="quiz-preset"><div><strong>{presetLabel}</strong><span>{presetWords.length} 個單字會直接套用為本次範圍。</span></div><button onClick={() => setUsePreset(false)}>改用一般範圍</button></div>}
             {preferenceFeedback && (
               <p className={`quiz-preference-feedback ${preferenceFeedback === "error" ? "error" : "applied"}`} role="status">
                 {preferenceFeedback === "restored" && "✓ 已套用上次測驗設定；修改後開始測驗，就會更新這組偏好。"}
@@ -350,10 +355,10 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
               </p>
             )}
             <div className="quiz-mode-tabs" role="group" aria-label="選擇測驗範圍">
-              <button className={rangeMode === "today" ? "active" : ""} onClick={() => setRangeMode("today")}>當日 50 詞</button>
-              <button className={rangeMode === "custom" ? "active" : ""} onClick={() => setRangeMode("custom")}>自訂天數</button>
-              <button className={rangeMode === "review" ? "active" : ""} onClick={() => setRangeMode("review")}>到期複習（{reviewIds.length}）</button>
-              <button className={rangeMode === "mistakes" ? "active" : ""} onClick={() => setRangeMode("mistakes")}>歷次錯題</button>
+              <button className={!usePreset && rangeMode === "today" ? "active" : ""} onClick={() => { setUsePreset(false); setRangeMode("today"); }}>當日 50 詞</button>
+              <button className={!usePreset && rangeMode === "custom" ? "active" : ""} onClick={() => { setUsePreset(false); setRangeMode("custom"); }}>自訂天數</button>
+              <button className={!usePreset && rangeMode === "review" ? "active" : ""} onClick={() => { setUsePreset(false); setRangeMode("review"); }}>到期複習（{reviewIds.length}）</button>
+              <button className={!usePreset && rangeMode === "mistakes" ? "active" : ""} onClick={() => { setUsePreset(false); setRangeMode("mistakes"); }}>歷次錯題</button>
             </div>
             {rangeMode === "custom" && (
               <div className="quiz-range">
@@ -361,7 +366,7 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
                 <label><span>到第幾天</span><input type="number" min="1" max={totalDays} value={endDay} onChange={(event) => setEndDay(Math.max(1, Math.min(totalDays, Number(event.target.value))))} /></label>
               </div>
             )}
-            <div className="quiz-status-picker">
+            {!usePreset && <div className="quiz-status-picker">
               <span>熟悉度（可複選）</span>
               <div className="quiz-status-options" role="group" aria-label="依熟悉度篩選測驗單字">
                 {(["known", "review", "unknown"] as QuizWordStatus[]).map((status) => (
@@ -376,7 +381,7 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
                 ))}
               </div>
               <small>{statusFilters.length ? `只測：${statusFilters.map((status) => statusLabels[status]).join("＋")}` : "未選狀態：包含此天數範圍內全部單字"}</small>
-            </div>
+            </div>}
             <div className="quiz-question-type-picker">
               <span>題型</span>
               <div className="quiz-question-type-options" role="group" aria-label="選擇測驗題型">
@@ -409,7 +414,7 @@ export default function QuizModal({ words, currentDay, totalDays, statuses, hist
               <small>時間到會顯示正確答案，由你按「下一題」。</small>
             </div>
             <div className="quiz-summary">
-              <strong>{rangeMode === "review" ? "到期複習" : rangeMode === "mistakes" ? "尚未答對的歷次錯題" : `Day ${effectiveStart}${effectiveEnd !== effectiveStart ? `–${effectiveEnd}` : ""}`}</strong>
+              <strong>{usePreset ? presetLabel : rangeMode === "review" ? "到期複習" : rangeMode === "mistakes" ? "尚未答對的歷次錯題" : `Day ${effectiveStart}${effectiveEnd !== effectiveStart ? `–${effectiveEnd}` : ""}`}</strong>
               <span>{scope.length} 題 · {questionType === "fill" ? `${fillDirectionModeLabels[directionMode]} · 填充題` : `${directionModeLabels[directionMode]}四選一`}{timerEnabled ? ` · 每題 ${timerSeconds} 秒` : ""}</span>
             </div>
             <button className="primary-button full" onClick={() => startQuiz()} disabled={!scope.length}>開始測驗</button>
