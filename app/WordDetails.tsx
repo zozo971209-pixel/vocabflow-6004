@@ -123,7 +123,6 @@ export default function WordDetails({ wordId, word, family, records, aiData: ori
             const zhSpan = findMeaningSpan(example.zh, example.meaning);
             return <p key={example.senseId}>
               <small className="canonical-sense-label">{example.pos} · {example.meaning}</small>
-              <small className="canonical-sense-explanation">{example.explanation}</small>
               <span className="example-english"><HighlightedText text={example.en} start={enSpan.start} end={enSpan.end} /></span>
               <small className="example-translation"><HighlightedText text={example.zh} start={zhSpan.start} end={zhSpan.end} /></small>
             </p>;

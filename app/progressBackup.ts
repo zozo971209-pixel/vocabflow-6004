@@ -1,5 +1,6 @@
 import type { QuizHistoryEntry, QuizWordStatus } from "./QuizModal";
 import type { ReviewMap } from "./reviewSchedule";
+import { deriveQuizMistakes, isQuizMistakeMap, type QuizMistakeMap } from "./quizMistakes";
 
 export type ProgressSnapshot = {
   statuses: Record<number, QuizWordStatus>;
@@ -8,6 +9,7 @@ export type ProgressSnapshot = {
   notes: Record<number, string>;
   reviews: ReviewMap;
   favorites: number[];
+  quizMistakes: QuizMistakeMap;
 };
 const object = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 const date = (value: unknown): value is string => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
@@ -64,11 +66,14 @@ export function parseProgressBackup(value: unknown, ids: Set<number>, totalDays:
     if (!Array.isArray(p.favorites) || !p.favorites.every(id => typeof id === "number" && ids.has(id)) || new Set(p.favorites).size !== p.favorites.length) return fail();
     favorites.push(...p.favorites);
   }
+  const quizMistakes = p.quizMistakes === undefined
+    ? deriveQuizMistakes(history)
+    : isQuizMistakeMap(p.quizMistakes, ids) ? p.quizMistakes : fail();
   if (s.meaningsHidden !== undefined && typeof s.meaningsHidden !== "boolean") return fail();
   if (s.lastWordId !== undefined && (typeof s.lastWordId !== "number" || !ids.has(s.lastWordId))) return fail();
   return {
     exportedAt: typeof value.exportedAt === "string" && Number.isFinite(Date.parse(value.exportedAt)) ? value.exportedAt : "",
-    progress: { statuses, notes, reviews, favorites, quizHistory: history,
+    progress: { statuses, notes, reviews, favorites, quizHistory: history, quizMistakes,
       settings: { currentDay: s.currentDay, startDate: s.startDate, speechSpeed: s.speechSpeed as ProgressSnapshot["settings"]["speechSpeed"], speechSpeedVersion: typeof s.speechSpeedVersion === "number" ? s.speechSpeedVersion : 0, theme: s.theme === "dark" ? "dark" : "light", fontSize: s.fontSize === "small" || s.fontSize === "large" ? s.fontSize : "normal", meaningsHidden: s.meaningsHidden === true, lastWordId: typeof s.lastWordId === "number" ? s.lastWordId : undefined } },
   };
 }
@@ -76,5 +81,6 @@ export function parseProgressBackup(value: unknown, ids: Set<number>, totalDays:
 export function mergeProgress(current: ProgressSnapshot, incoming: ProgressSnapshot): ProgressSnapshot {
   const history = new Map(incoming.quizHistory.map(entry => [entry.id, entry]));
   current.quizHistory.forEach(entry => history.set(entry.id, entry));
-  return { ...current, statuses: { ...incoming.statuses, ...current.statuses }, notes: { ...incoming.notes, ...current.notes }, reviews: { ...incoming.reviews, ...current.reviews }, favorites: [...new Set([...incoming.favorites, ...current.favorites])], quizHistory: [...history.values()].sort((a, b) => Date.parse(b.completedAt) - Date.parse(a.completedAt)).slice(0, 50) };
+  const quizHistory = [...history.values()].sort((a, b) => Date.parse(b.completedAt) - Date.parse(a.completedAt)).slice(0, 50);
+  return { ...current, statuses: { ...incoming.statuses, ...current.statuses }, notes: { ...incoming.notes, ...current.notes }, reviews: { ...incoming.reviews, ...current.reviews }, favorites: [...new Set([...incoming.favorites, ...current.favorites])], quizHistory, quizMistakes: { ...incoming.quizMistakes, ...current.quizMistakes } };
 }

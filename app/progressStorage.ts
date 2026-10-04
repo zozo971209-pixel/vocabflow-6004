@@ -10,6 +10,7 @@ export function persistProgress(storage: Store, progress: ProgressSnapshot) {
     "vocab6004-notes-v1": progress.notes,
     "vocab6004-review-v1": progress.reviews,
     "vocab6004-favorites-v1": progress.favorites,
+    "vocab6004-quiz-mistakes-v1": progress.quizMistakes,
   };
   const before = new Map(Object.keys(values).map(key => [key, storage.getItem(key)]));
   const written: string[] = [];

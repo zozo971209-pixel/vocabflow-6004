@@ -1,15 +1,20 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import ts from "typescript";
-async function load(file) {
-  const { outputText } = ts.transpileModule(fs.readFileSync(file, "utf8"), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } });
-  return import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
+function transpile(file) {
+  return ts.transpileModule(fs.readFileSync(file, "utf8"), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText;
+}
+const dataUrl = source => `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
+async function load(file) { return import(dataUrl(transpile(file))); }
+async function loadWithDependency(file, specifier, dependencyFile) {
+  return import(dataUrl(transpile(file).replaceAll(JSON.stringify(specifier), JSON.stringify(dataUrl(transpile(dependencyFile))))));
 }
 const { scheduleReview, dueReviewIds } = await load("app/reviewSchedule.ts");
-const { parseProgressBackup, mergeProgress } = await load("app/progressBackup.ts");
+const { parseProgressBackup, mergeProgress } = await loadWithDependency("app/progressBackup.ts", "./quizMistakes", "app/quizMistakes.ts");
 const { persistProgress } = await load("app/progressStorage.ts");
 const { isChineseMeaningCorrect, isFillAnswerCorrect, fillAnswerFeedback } = await load("app/quizAnswers.ts");
 const { loadQuizPreferences, saveQuizPreferences, QUIZ_PREFERENCES_KEY } = await load("app/quizPreferences.ts");
+const { deriveQuizMistakes, updateQuizMistakes } = await load("app/quizMistakes.ts");
 const now = new Date(2026, 0, 31, 12);
 const first = scheduleReview(undefined, true, now);
 assert.equal(first.due, "2026-02-01");
@@ -30,7 +35,7 @@ assert(isFillAnswerCorrect("Apple!", "apple"));
 assert(isFillAnswerCorrect("colour", "color/colour"));
 assert(!isFillAnswerCorrect("apples", "apple"));
 assert(fillAnswerFeedback("apples", "apple", "zh-to-en").includes("詞形"));
-const current = { statuses: { 1: "known" }, notes: { 1: "本機筆記" }, reviews: { 1: first }, favorites: [1], quizHistory: [], settings: { currentDay: 1, startDate: "2026-01-31", speechSpeed: "normal", speechSpeedVersion: 3, theme: "dark", fontSize: "large", meaningsHidden: true, lastWordId: 1 } };
+const current = { statuses: { 1: "known" }, notes: { 1: "本機筆記" }, reviews: { 1: first }, favorites: [1], quizHistory: [], quizMistakes: {}, settings: { currentDay: 1, startDate: "2026-01-31", speechSpeed: "normal", speechSpeedVersion: 3, theme: "dark", fontSize: "large", meaningsHidden: true, lastWordId: 1 } };
 const incoming = { ...current, statuses: { 1: "unknown", 2: "review" }, notes: { 1: "匯入筆記", 2: "新增筆記" } };
 const envelope = progress => ({ format: "vocabflow-progress", version: 1, progress });
 const ids = new Set([1, 2, 3]);
@@ -46,10 +51,11 @@ assert.throws(() => parseProgressBackup(envelope({ ...current, settings: { ...cu
 assert.throws(() => parseProgressBackup(envelope({ ...current, notes: { 1: 7 } }), ids, 121));
 assert.throws(() => parseProgressBackup(envelope({ ...current, quizHistory: [{ id: "bad", total: -1 }] }), ids, 121));
 assert.throws(() => parseProgressBackup(envelope({ ...current, reviews: { 1: { ...first, streak: -1 } } }), ids, 121));
-const legacy = { ...current }; delete legacy.notes; delete legacy.quizHistory; delete legacy.reviews; delete legacy.favorites;
+const legacy = { ...current }; delete legacy.notes; delete legacy.quizHistory; delete legacy.quizMistakes; delete legacy.reviews; delete legacy.favorites;
 assert.deepEqual(parseProgressBackup(envelope(legacy), ids, 121).progress.notes, {});
 assert.deepEqual(parseProgressBackup(envelope(legacy), ids, 121).progress.reviews, {});
 assert.deepEqual(parseProgressBackup(envelope(legacy), ids, 121).progress.favorites, []);
+assert.deepEqual(parseProgressBackup(envelope(legacy), ids, 121).progress.quizMistakes, {});
 const saved = new Map();
 let failOnce = false;
 const fakeStorage = {
@@ -82,4 +88,15 @@ saveQuizPreferences(fakeStorage, quizPreferences);
 assert.deepEqual(loadQuizPreferences(fakeStorage, 1, 121), { preferences: quizPreferences, restored: true });
 saved.set(QUIZ_PREFERENCES_KEY, JSON.stringify({ ...quizPreferences, startDay: -5, endDay: 999, timerSeconds: 2, statusFilters: ["review", "invalid", "review"] }));
 assert.deepEqual(loadQuizPreferences(fakeStorage, 1, 121).preferences, { ...quizPreferences, startDay: 1, endDay: 121, timerSeconds: 5, statusFilters: ["review"] });
-console.log("PASS: review dates, grading, backup safety, and persistent validated quiz preferences");
+const wrong = { id: "wrong", completedAt: "2026-02-01T00:00:00.000Z", startDay: 1, endDay: 1, total: 1, correct: 0, wrongWordIds: [1], testedWordIds: [1] };
+const right = suffix => ({ id: `right-${suffix}`, completedAt: `2026-02-0${suffix + 1}T00:00:00.000Z`, startDay: 1, endDay: 1, total: 1, correct: 1, wrongWordIds: [], testedWordIds: [1] });
+let mistakes = updateQuizMistakes({}, wrong);
+assert.equal(mistakes[1].correctStreak, 0);
+mistakes = updateQuizMistakes(mistakes, right(1));
+assert.equal(mistakes[1].correctStreak, 1);
+mistakes = updateQuizMistakes(mistakes, right(2));
+assert.equal(mistakes[1].correctStreak, 2);
+mistakes = updateQuizMistakes(mistakes, right(3));
+assert.equal(mistakes[1], undefined, "A mistake must disappear after three later correct answers");
+assert.deepEqual(deriveQuizMistakes([right(2), wrong, right(1)]), { 1: { correctStreak: 2, lastWrongAt: wrong.completedAt } });
+console.log("PASS: review dates, grading, backup safety, persistent quiz preferences, and three-correct mistake clearing");

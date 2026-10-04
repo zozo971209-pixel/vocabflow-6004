@@ -11,9 +11,10 @@ import { SourceExample, isSourceExamplePayload } from "./sourceExamples";
 import { CanonicalExample, isCanonicalExamplePayload } from "./canonicalExamples";
 import { buildWordFamilyMap } from "./wordEnhancements";
 import { parseMeaningGroups } from "./meaningGroups";
-import { dueReviewIds, localDate, ReviewMap, scheduleReview } from "./reviewSchedule";
+import { localDate, ReviewMap, scheduleReview } from "./reviewSchedule";
 import { mergeProgress, parseProgressBackup, ProgressSnapshot } from "./progressBackup";
 import { persistProgress } from "./progressStorage";
+import { deriveQuizMistakes, isQuizMistakeMap, updateQuizMistakes, type QuizMistakeMap } from "./quizMistakes";
 
 type Word = {
   id: number;
@@ -52,6 +53,7 @@ const SEARCH_PAGE_SIZE = 200;
 const NOTES_KEY = "vocab6004-notes-v1";
 const REVIEW_KEY = "vocab6004-review-v1";
 const FAVORITES_KEY = "vocab6004-favorites-v1";
+const QUIZ_MISTAKES_KEY = "vocab6004-quiz-mistakes-v1";
 const UNDO_KEY = "vocab6004-import-undo-v1";
 const SPEECH_SPEED_VERSION = 3;
 const WORDS_PER_DAY = 50;
@@ -101,11 +103,6 @@ function cleanSpeechText(text: string, lang: "en-US" | "zh-TW") {
     .replace(/[\/\\|*_~]/g, "，")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function formatPhonetic(value: string) {
-  if (!value) return "";
-  return value.includes("/") ? value : `/ ${value} /`;
 }
 
 function speak(text: string, lang: "en-US" | "zh-TW", speed: SpeechSpeed) {
@@ -176,10 +173,13 @@ export default function Home() {
   const [infoOpen, setInfoOpen] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
   const [quizAutoStart, setQuizAutoStart] = useState(false);
+  const [quizSettingsOnly, setQuizSettingsOnly] = useState(false);
   const [quizHistory, setQuizHistory] = useState<QuizHistoryEntry[]>([]);
+  const [quizMistakes, setQuizMistakes] = useState<QuizMistakeMap>({});
   const [reviewRecords, setReviewRecords] = useState<ReviewMap>({});
   const [favorites, setFavorites] = useState<Set<number>>(new Set());
   const [favoriteOnly, setFavoriteOnly] = useState(false);
+  const [mistakeOnly, setMistakeOnly] = useState(false);
   const [meaningsHidden, setMeaningsHidden] = useState(false);
   const [revealedMeaningIds, setRevealedMeaningIds] = useState<Set<number>>(new Set());
   const [lastWordId, setLastWordId] = useState<number | undefined>();
@@ -206,8 +206,10 @@ export default function Home() {
       Promise.resolve().then(() => localStorage.getItem(QUIZ_HISTORY_KEY)),
       Promise.resolve().then(() => localStorage.getItem(NOTES_KEY)),
       Promise.resolve().then(() => localStorage.getItem(FAVORITES_KEY)),
-    ]).then(([data, enrichment, aiData, exampleData, sourceExampleData, canonicalExampleData, savedStatuses, savedSettings, savedQuizHistory, savedNotes, savedFavorites]) => {
-      setWords(data as Word[]);
+      Promise.resolve().then(() => localStorage.getItem(QUIZ_MISTAKES_KEY)),
+    ]).then(([data, enrichment, aiData, exampleData, sourceExampleData, canonicalExampleData, savedStatuses, savedSettings, savedQuizHistory, savedNotes, savedFavorites, savedQuizMistakes]) => {
+      const loadedWords = data as Word[];
+      setWords(loadedWords);
       if (enrichment && typeof enrichment === "object" && (enrichment as { schemaVersion?: unknown }).schemaVersion === 1) {
         const candidateRecords = (enrichment as { records?: unknown }).records;
         if (Array.isArray(candidateRecords)) setEnrichmentRecords(candidateRecords.filter(isVerifiedEnrichmentRecord));
@@ -236,9 +238,12 @@ export default function Home() {
         setMeaningsHidden(settings.meaningsHidden === true);
         if (typeof settings.lastWordId === "number") setLastWordId(settings.lastWordId);
       }
-      if (savedQuizHistory) setQuizHistory(JSON.parse(savedQuizHistory));
+      const restoredHistory = savedQuizHistory ? JSON.parse(savedQuizHistory) as QuizHistoryEntry[] : [];
+      setQuizHistory(restoredHistory);
       if (savedNotes) setWordNotes(JSON.parse(savedNotes));
       if (savedFavorites) setFavorites(new Set(JSON.parse(savedFavorites)));
+      const parsedQuizMistakes = savedQuizMistakes ? JSON.parse(savedQuizMistakes) : null;
+      setQuizMistakes(isQuizMistakeMap(parsedQuizMistakes, new Set(loadedWords.map(word => word.id))) ? parsedQuizMistakes : deriveQuizMistakes(restoredHistory));
       setCanUndo(Boolean(localStorage.getItem(UNDO_KEY)));
       const savedReviews = localStorage.getItem(REVIEW_KEY);
       if (savedReviews) setReviewRecords(JSON.parse(savedReviews));
@@ -261,14 +266,14 @@ export default function Home() {
     Promise.resolve().then(() => {
       if (!active) return;
       try {
-        persistProgress(localStorage, { statuses, settings: { currentDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize, meaningsHidden, lastWordId }, quizHistory, notes: wordNotes, reviews: reviewRecords, favorites: [...favorites] });
+        persistProgress(localStorage, { statuses, settings: { currentDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize, meaningsHidden, lastWordId }, quizHistory, quizMistakes, notes: wordNotes, reviews: reviewRecords, favorites: [...favorites] });
         setStorageError("");
       } catch (error) {
         setStorageError(error instanceof Error ? error.message : "紀錄儲存失敗，請先匯出備份。");
       }
     });
     return () => { active = false; };
-  }, [statuses, currentDay, startDate, speechSpeed, theme, fontSize, quizHistory, wordNotes, reviewRecords, favorites, meaningsHidden, lastWordId, loaded]);
+  }, [statuses, currentDay, startDate, speechSpeed, theme, fontSize, quizHistory, quizMistakes, wordNotes, reviewRecords, favorites, meaningsHidden, lastWordId, loaded]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -349,11 +354,12 @@ export default function Home() {
         (statusFilter === "unmarked" ? !statuses[word.id] : statuses[word.id] === statusFilter);
       const matchesLevel = levelFilter === 0 || word.level === levelFilter;
       const matchesFavorite = !favoriteOnly || favorites.has(word.id);
-      return matchesQuery && matchesStatus && matchesLevel && matchesFavorite;
+      const matchesMistake = !mistakeOnly || Boolean(quizMistakes[word.id]);
+      return matchesQuery && matchesStatus && matchesLevel && matchesFavorite && matchesMistake;
     });
-  }, [query, words, dayWords, searchDayMode, safeSearchStart, safeSearchEnd, statusFilter, levelFilter, statuses, favoriteOnly, favorites]);
+  }, [query, words, dayWords, searchDayMode, safeSearchStart, safeSearchEnd, statusFilter, levelFilter, statuses, favoriteOnly, favorites, mistakeOnly, quizMistakes]);
   const filteredWords = filteredMatches.slice(0, visibleResultCount);
-  const isFilteredView = Boolean(query) || searchDayMode !== "today" || statusFilter !== "all" || levelFilter !== 0 || favoriteOnly;
+  const isFilteredView = Boolean(query) || searchDayMode !== "today" || statusFilter !== "all" || levelFilter !== 0 || favoriteOnly || mistakeOnly;
   const searchScopeLabel = searchDayMode === "all"
     ? "全部天數"
     : searchDayMode === "range"
@@ -367,7 +373,7 @@ export default function Home() {
   }), [statuses]);
 
   const canonicalCoverage = Object.keys(canonicalExamples).length;
-  const dueIds = useMemo(() => dueReviewIds(reviewRecords), [reviewRecords]);
+  const mistakeCount = Object.keys(quizMistakes).length;
 
   useEffect(() => {
     const cards = document.querySelectorAll<HTMLElement>(".word-card[data-word-id]");
@@ -379,7 +385,7 @@ export default function Home() {
     }, { threshold: [0.55, 0.8] });
     cards.forEach(card => observer.observe(card));
     return () => observer.disconnect();
-  }, [safeDay, query, statusFilter, levelFilter, searchDayMode, safeSearchStart, safeSearchEnd, favoriteOnly, visibleResultCount]);
+  }, [safeDay, query, statusFilter, levelFilter, searchDayMode, safeSearchStart, safeSearchEnd, favoriteOnly, mistakeOnly, visibleResultCount]);
 
   function mark(id: number, status: WordStatus) {
     setStatuses((current) => ({ ...current, [id]: status }));
@@ -394,19 +400,27 @@ export default function Home() {
     });
   }
 
-  function openQuiz(preset: { words: Word[]; label: string } | null = null, autoStart = false) {
+  function openQuiz(preset: { words: Word[]; label: string } | null = null, autoStart = false, settingsOnly = false) {
     setQuizPreset(preset);
     setQuizAutoStart(autoStart);
+    setQuizSettingsOnly(settingsOnly);
     setQuizOpen(true);
   }
 
   function completeQuiz(entry: QuizHistoryEntry) {
     setQuizHistory(current => [entry, ...current].slice(0, 50));
+    setQuizMistakes(current => updateQuizMistakes(current, entry));
     setReviewRecords(current => {
       const next = { ...current };
       for (const id of entry.testedWordIds ?? []) next[id] = scheduleReview(current[id], !entry.wrongWordIds.includes(id));
       return next;
     });
+  }
+
+  function clearFavorites() {
+    if (!favorites.size || !window.confirm(`確定要刪除全部 ${favorites.size} 個收藏嗎？`)) return;
+    setFavorites(new Set());
+    setFavoriteOnly(false);
   }
 
   function changeDay(next: number) {
@@ -468,6 +482,7 @@ export default function Home() {
         statuses,
         settings: { currentDay: safeDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize, meaningsHidden, lastWordId },
         quizHistory,
+        quizMistakes,
         notes: wordNotes,
         reviews: reviewRecords,
         favorites: [...favorites],
@@ -486,7 +501,7 @@ export default function Home() {
   }
 
   function currentSnapshot(): ProgressSnapshot {
-    return { statuses, settings: { currentDay: safeDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize, meaningsHidden, lastWordId }, quizHistory, notes: wordNotes, reviews: reviewRecords, favorites: [...favorites] };
+    return { statuses, settings: { currentDay: safeDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize, meaningsHidden, lastWordId }, quizHistory, quizMistakes, notes: wordNotes, reviews: reviewRecords, favorites: [...favorites] };
   }
 
   function applySnapshot(next: ProgressSnapshot) {
@@ -500,6 +515,7 @@ export default function Home() {
     setLastWordId(next.settings.lastWordId);
     setWordNotes(next.notes);
     setQuizHistory(next.quizHistory);
+    setQuizMistakes(next.quizMistakes);
     setReviewRecords(next.reviews);
     setFavorites(new Set(next.favorites));
   }
@@ -564,7 +580,7 @@ export default function Home() {
           <span><strong>詞序 VocabFlow</strong><small>高中英文每日學習</small></span>
         </a>
         <div className="top-actions">
-          <button className="primary-button" onClick={() => openQuiz()}>✦ 單字測驗</button>
+          <button className="primary-button" onClick={() => openQuiz(null, false, true)}>✦ 測驗設定</button>
           <button className="primary-button top-settings-button" onClick={() => setSettingsOpen(true)} aria-label="學習設定">⚙ 學習設定</button>
         </div>
       </header>
@@ -585,8 +601,8 @@ export default function Home() {
             {(Object.keys(statusMeta) as WordStatus[]).map(status => <button key={status} className={status} onClick={() => { setSearchDayMode("all"); setStatusFilter(status); }}><span>{statusMeta[status].icon}</span>{statusMeta[status].label}<strong>{allCounts[status]}</strong></button>)}
           </div>
           <div className="overview-actions">
-            <button className="resume-button" onClick={() => { setQuery(""); setLevelFilter(0); setStatusFilter("all"); setSearchDayMode("all"); setFavoriteOnly(true); }}>★ 收藏 {favorites.size}</button>
-            <button className="due-button" onClick={() => openQuiz(null, true)}>✦ 測驗</button>
+            <button className="resume-button" onClick={() => { setQuery(""); setLevelFilter(0); setStatusFilter("all"); setSearchDayMode("all"); setMistakeOnly(false); setFavoriteOnly(true); }}>★ 收藏 {favorites.size}</button>
+            <button className="due-button" onClick={() => { setQuery(""); setLevelFilter(0); setStatusFilter("all"); setSearchDayMode("all"); setFavoriteOnly(false); setMistakeOnly(true); }}>! 錯誤紀錄 {mistakeCount}</button>
           </div>
         </section>
 
@@ -622,7 +638,7 @@ export default function Home() {
               <option value="unknown">不熟</option>
               <option value="unmarked">未標記</option>
             </select></label>
-          <button className={`favorite-filter ${favoriteOnly ? "active" : ""}`} aria-pressed={favoriteOnly} onClick={() => { setFavoriteOnly(value => !value); setVisibleResultCount(SEARCH_PAGE_SIZE); }}>★ 收藏 {favorites.size}</button>
+          <button className={`favorite-filter ${favoriteOnly ? "active" : ""}`} aria-pressed={favoriteOnly} onClick={() => { setFavoriteOnly(value => !value); setMistakeOnly(false); setVisibleResultCount(SEARCH_PAGE_SIZE); }}>★ 收藏 {favorites.size}</button>
           </div>
           <button className="speech-mode" onClick={() => setSpeechSpeed(nextSpeechSpeed)} aria-label="切換朗讀速度">
             <span>▶</span>朗讀：{speechSpeed === "ultraSlow" ? "超慢速" : speechSpeed === "slow" ? "慢速" : "正常"}
@@ -643,7 +659,8 @@ export default function Home() {
             {levelFilter > 0 && <button onClick={() => setLevelFilter(0)}>第 {levelFilter} 級 ×</button>}
             {statusFilter !== "all" && <button onClick={() => setStatusFilter("all")}>{statusFilter === "unmarked" ? "未標記" : statusMeta[statusFilter].label} ×</button>}
             {favoriteOnly && <button onClick={() => setFavoriteOnly(false)}>收藏 ×</button>}
-            <button className="clear-filters" onClick={() => { setQuery(""); setSearchDayMode("today"); setLevelFilter(0); setStatusFilter("all"); setFavoriteOnly(false); }}>全部清除</button>
+            {mistakeOnly && <button onClick={() => setMistakeOnly(false)}>錯誤紀錄 ×</button>}
+            <button className="clear-filters" onClick={() => { setQuery(""); setSearchDayMode("today"); setLevelFilter(0); setStatusFilter("all"); setFavoriteOnly(false); setMistakeOnly(false); }}>全部清除</button>
           </div>}
         </section>
 
@@ -651,7 +668,8 @@ export default function Home() {
           <div><p>{isFilteredView ? `${searchScopeLabel}搜尋結果` : `DAY ${safeDay} · TODAY'S WORDS`}</p><h2>{isFilteredView ? `找到 ${filteredMatches.length} 筆` : "今日單字"}</h2></div>
           <div className="list-actions">
             <button onClick={() => setFocusOpen(true)} disabled={!filteredMatches.length}>◎ 專注學習</button>
-            <button onClick={() => openQuiz({ words: filteredMatches, label: isFilteredView ? "目前篩選結果" : `Day ${safeDay} 單字` })} disabled={!filteredMatches.length}>✦ 測驗這 {filteredMatches.length} 詞</button>
+            {favoriteOnly && favorites.size > 0 && <button className="clear-favorites-button" onClick={clearFavorites}>刪除全部收藏</button>}
+            <button onClick={() => openQuiz({ words: filteredMatches, label: isFilteredView ? "目前篩選結果" : `Day ${safeDay} 單字` }, true)} disabled={!filteredMatches.length}>✦ 測驗</button>
           </div>
         </div>
 
@@ -662,11 +680,11 @@ export default function Home() {
             return (
               <article className={`word-card ${status ? `is-${status}` : ""}`} key={word.id} data-word-id={word.id}>
                 <div className="card-topline">
-                  <span className="rank">#{dayRank} 本日順序</span>
+                  <span className="rank">#{dayRank}</span>
                   <div className="card-badges"><button className={`favorite-button ${favorites.has(word.id) ? "active" : ""}`} onClick={() => toggleFavorite(word.id)} aria-label={favorites.has(word.id) ? `取消收藏 ${word.word}` : `收藏 ${word.word}`}>★</button><span className={`level level-${word.level}`}>LEVEL {word.level}</span></div>
                 </div>
                 <div className="word-line">
-                  <div><h3>{word.word}</h3><p>{word.pos} <span>{formatPhonetic(word.phonetic)}</span></p></div>
+                  <div><h3>{word.word}</h3></div>
                   <button className="speak-button" onClick={() => speak(word.word, "en-US", speechSpeed)} aria-label={`朗讀 ${word.word}`}>▶<small>EN</small></button>
                 </div>
                 <div className={`meaning ${meaningsHidden && !revealedMeaningIds.has(word.id) ? "is-hidden" : ""}`}>
@@ -825,14 +843,11 @@ export default function Home() {
           words={words}
           currentDay={safeDay}
           totalDays={totalDays}
-          statuses={statuses}
-          history={quizHistory}
-          reviewIds={dueIds}
           presetWords={quizPreset?.words}
-          presetLabel={quizPreset?.label}
+          settingsOnly={quizSettingsOnly}
           autoStart={quizAutoStart}
           onComplete={completeQuiz}
-          onClose={() => { setQuizOpen(false); setQuizPreset(null); setQuizAutoStart(false); }}
+          onClose={() => { setQuizOpen(false); setQuizPreset(null); setQuizAutoStart(false); setQuizSettingsOnly(false); }}
         />
       )}
       {focusOpen && (
