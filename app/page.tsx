@@ -580,7 +580,7 @@ export default function Home() {
           <span><strong>詞序 VocabFlow</strong><small>高中英文每日學習</small></span>
         </a>
         <div className="top-actions">
-          <button className="primary-button" onClick={() => openQuiz(null, false, true)}>✦ 測驗設定</button>
+          <button className="primary-button top-settings-button" onClick={() => openQuiz(null, false, true)}>✦ 測驗設定</button>
           <button className="primary-button top-settings-button" onClick={() => setSettingsOpen(true)} aria-label="學習設定">⚙ 學習設定</button>
         </div>
       </header>
@@ -669,7 +669,7 @@ export default function Home() {
           <div className="list-actions">
             <button onClick={() => setFocusOpen(true)} disabled={!filteredMatches.length}>◎ 專注學習</button>
             {favoriteOnly && favorites.size > 0 && <button className="clear-favorites-button" onClick={clearFavorites}>刪除全部收藏</button>}
-            <button onClick={() => openQuiz({ words: filteredMatches, label: isFilteredView ? "目前篩選結果" : `Day ${safeDay} 單字` }, true)} disabled={!filteredMatches.length}>✦ 測驗</button>
+            <button className="list-quiz-button" onClick={() => openQuiz({ words: filteredMatches, label: isFilteredView ? "目前篩選結果" : `Day ${safeDay} 單字` }, true)} disabled={!filteredMatches.length}>驗下方單字</button>
           </div>
         </div>
 
