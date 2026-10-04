@@ -63,7 +63,7 @@ const today = localDate();
 const statusMeta: Record<WordStatus, { label: string; icon: string }> = {
   known: { label: "已熟悉", icon: "✓" },
   review: { label: "待複習", icon: "↻" },
-  unknown: { label: "不熟", icon: "!" },
+  unknown: { label: "不熟", icon: "?" },
 };
 
 const speechRates: Record<SpeechSpeed, number> = {
