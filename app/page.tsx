@@ -669,7 +669,7 @@ export default function Home() {
           <div className="list-actions">
             <button onClick={() => setFocusOpen(true)} disabled={!filteredMatches.length}>◎ 專注學習</button>
             {favoriteOnly && favorites.size > 0 && <button className="clear-favorites-button" onClick={clearFavorites}>刪除全部收藏</button>}
-            <button className="list-quiz-button" onClick={() => openQuiz({ words: filteredMatches, label: isFilteredView ? "目前篩選結果" : `Day ${safeDay} 單字` }, true)} disabled={!filteredMatches.length}>驗下方單字</button>
+            <button className="list-quiz-button" onClick={() => openQuiz({ words: filteredMatches, label: isFilteredView ? "目前篩選結果" : `Day ${safeDay} 單字` }, true)} disabled={!filteredMatches.length}>測驗下方單字</button>
           </div>
         </div>
 
