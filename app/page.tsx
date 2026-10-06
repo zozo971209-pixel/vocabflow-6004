@@ -687,12 +687,14 @@ export default function Home() {
                   <div><h3>{word.word}</h3></div>
                   <button className="speak-button" onClick={() => speak(word.word, "en-US", speechSpeed)} aria-label={`朗讀 ${word.word}`}>▶<small>EN</small></button>
                 </div>
-                <div className={`meaning ${meaningsHidden && !revealedMeaningIds.has(word.id) ? "is-hidden" : ""}`}>
-                  {meaningsHidden && !revealedMeaningIds.has(word.id) ? <button className="reveal-meaning" onClick={() => setRevealedMeaningIds(current => new Set(current).add(word.id))}>顯示中文意思</button> :
+                {meaningsHidden && !revealedMeaningIds.has(word.id) ? (
+                  <button type="button" className="meaning is-hidden meaning-reveal" onClick={() => setRevealedMeaningIds(current => new Set(current).add(word.id))}>顯示中文意思</button>
+                ) : (
+                  <div className="meaning">
                   <div className="meaning-groups">
                     {parseMeaningGroups(word.meaning, word.pos).map((group) => (
                       <div className="meaning-group" key={group.key}>
-                        <div className={`meaning-pos pos-${group.abbreviation.replace(".", "") || "general"}`}>
+                        <div className={`meaning-pos pos-${group.abbreviation.replace(/[^a-z]/gi, "-") || "general"}`}>
                           <span>{group.label}</span>
                           {group.sourceField && <small>[{group.sourceField}]</small>}
                         </div>
@@ -706,8 +708,9 @@ export default function Home() {
                         ))}
                       </div>
                     ))}
-                  </div>}
-                </div>
+                  </div>
+                  </div>
+                )}
                 {word.note && <p className="note">備註：{word.note}</p>}
                 <div className="status-actions" role="group" aria-label={`${word.word} 的熟悉度`}>
                   {(Object.keys(statusMeta) as WordStatus[]).map((key) => (

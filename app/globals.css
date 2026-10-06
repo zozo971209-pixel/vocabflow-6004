@@ -525,7 +525,8 @@ html[data-theme="dark"] input[type="date"] { color-scheme: dark; }
 .speak-button { width: 40px; height: 40px; border-radius: 11px; }
 .meaning { min-height: 0; padding: 8px 10px; margin: 8px 0; }
 .meaning.is-hidden { display: grid; place-items: center; min-height: 52px; border: 1px dashed #d9dcff; background: #fafaff; }
-.reveal-meaning { min-height: 36px; border: 0; background: transparent; color: var(--indigo); font-size: 11px; font-weight: 850; }
+.meaning-reveal { width: 100%; color: var(--indigo); font: inherit; font-size: 11px; font-weight: 850; cursor: pointer; }
+.meaning-reveal:hover, .meaning-reveal:focus-visible { border-color: #aaa6ff; background: #f4f3ff; outline: none; }
 .status-actions button { min-height: 38px; padding-block: 7px; }
 .word-details summary { min-height: 40px; padding-top: 6px; }
 

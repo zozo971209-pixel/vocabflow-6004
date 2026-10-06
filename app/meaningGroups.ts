@@ -26,6 +26,19 @@ const POS_LABELS: Record<string, string> = {
   interj: "感嘆詞",
 };
 
+const POS_NAME_PATTERN = "vt|vi|adj|adv|prep|pron|conj|art|num|aux|interj|int|ad|v|n|a";
+const POS_TOKEN_PATTERN = `\\(?(?:${POS_NAME_PATTERN})\\.\\)?`;
+const POS_SEQUENCE_PATTERN = new RegExp(`^(${POS_TOKEN_PATTERN}(?:\\s*\\/\\s*${POS_TOKEN_PATTERN})*)\\s*(.*)$`, "i");
+
+function parsePosSequence(value: string) {
+  const keys = [...value.matchAll(new RegExp(POS_NAME_PATTERN, "gi"))].map((match) => match[0].toLowerCase());
+  if (!keys.length) return undefined;
+  return {
+    abbreviation: keys.map((key) => `${key}.`).join("/"),
+    label: [...new Set(keys.map((key) => POS_LABELS[key] ?? key))].join("／"),
+  };
+}
+
 function splitSenses(value: string) {
   return value
     .split(/[，,；;]+/)
@@ -36,7 +49,7 @@ function splitSenses(value: string) {
 export function parseMeaningGroups(meaning: string, fallbackPos = ""): MeaningGroup[] {
   const groups: MeaningGroup[] = [];
   let current: MeaningGroup | undefined;
-  const fallbackAbbreviation = fallbackPos.match(/vt|vi|v|n|adj|adv|prep|pron|conj|art|num|aux|interj/i)?.[0].toLowerCase();
+  const fallback = parsePosSequence(fallbackPos);
 
   const ensureGeneralGroup = () => {
     if (!current) {
@@ -65,8 +78,8 @@ export function parseMeaningGroups(meaning: string, fallbackPos = ""): MeaningGr
         if (!current) {
           current = {
             key: `field-${groups.length}`,
-            abbreviation: fallbackAbbreviation ? `${fallbackAbbreviation}.` : "",
-            label: fallbackAbbreviation ? (POS_LABELS[fallbackAbbreviation] ?? fallbackAbbreviation) : "一般用法",
+            abbreviation: fallback?.abbreviation ?? "",
+            label: fallback?.label ?? "一般用法",
             sourceField: field,
             senses,
             supplements: [],
@@ -78,15 +91,15 @@ export function parseMeaningGroups(meaning: string, fallbackPos = ""): MeaningGr
         return;
       }
 
-      const posMatch = line.match(/^(vt|vi|v|n|a|ad|adj|adv|prep|pron|conj|art|num|aux|int|interj)\.\s*(.*)$/i);
-      const abbreviation = posMatch?.[1].toLowerCase();
+      const posMatch = line.match(POS_SEQUENCE_PATTERN);
+      const pos = posMatch ? parsePosSequence(posMatch[1]) : undefined;
       const senses = splitSenses(posMatch?.[2] ?? line);
       if (!senses.length) return;
 
       current = {
-        key: `${abbreviation ?? "general"}-${groups.length}`,
-        abbreviation: abbreviation ? `${abbreviation}.` : "",
-        label: abbreviation ? (POS_LABELS[abbreviation] ?? abbreviation) : "一般用法",
+        key: `${pos?.abbreviation.replace(/[^a-z]/gi, "-") ?? "general"}-${groups.length}`,
+        abbreviation: pos?.abbreviation ?? "",
+        label: pos?.label ?? "一般用法",
         senses,
         supplements: [],
       };
