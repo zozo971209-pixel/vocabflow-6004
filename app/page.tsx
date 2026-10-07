@@ -230,6 +230,10 @@ export default function Home() {
       if (savedStatuses) setStatuses(JSON.parse(savedStatuses));
       if (savedSettings) {
         const settings = JSON.parse(savedSettings);
+        const savedTotalDays = Math.max(1, Math.ceil(loadedWords.length / WORDS_PER_DAY));
+        const clampSavedDay = (value: unknown, fallback: number) => typeof value === "number" && Number.isInteger(value)
+          ? Math.max(1, Math.min(savedTotalDays, value))
+          : fallback;
         setCurrentDay(settings.currentDay ?? 1);
         setStartDate(settings.startDate ?? today);
         setSpeechSpeed(restoreSpeechSpeed(settings.speechSpeed, settings.speechSpeedVersion));
@@ -237,6 +241,15 @@ export default function Home() {
         setFontSize(["small", "normal", "large"].includes(settings.fontSize) ? settings.fontSize : "normal");
         setMeaningsHidden(settings.meaningsHidden === true);
         if (typeof settings.lastWordId === "number") setLastWordId(settings.lastWordId);
+        setQuery(typeof settings.query === "string" ? settings.query : "");
+        setStatusFilter(["known", "review", "unknown", "unmarked"].includes(settings.statusFilter) ? settings.statusFilter : "all");
+        setLevelFilter(Number.isInteger(settings.levelFilter) && settings.levelFilter >= 0 && settings.levelFilter <= 6 ? settings.levelFilter : 0);
+        setSearchDayMode(settings.searchDayMode === "all" || settings.searchDayMode === "range" ? settings.searchDayMode : "today");
+        setSearchStartDay(clampSavedDay(settings.searchStartDay, clampSavedDay(settings.currentDay, 1)));
+        setSearchEndDay(clampSavedDay(settings.searchEndDay, clampSavedDay(settings.currentDay, 1)));
+        setFavoriteOnly(settings.favoriteOnly === true);
+        setMistakeOnly(settings.favoriteOnly === true ? false : settings.mistakeOnly === true);
+        setFilterPanelOpen(settings.filterPanelOpen === true);
       }
       const restoredHistory = savedQuizHistory ? JSON.parse(savedQuizHistory) as QuizHistoryEntry[] : [];
       setQuizHistory(restoredHistory);
@@ -266,14 +279,14 @@ export default function Home() {
     Promise.resolve().then(() => {
       if (!active) return;
       try {
-        persistProgress(localStorage, { statuses, settings: { currentDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize, meaningsHidden, lastWordId }, quizHistory, quizMistakes, notes: wordNotes, reviews: reviewRecords, favorites: [...favorites] });
+        persistProgress(localStorage, { statuses, settings: { currentDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize, meaningsHidden, lastWordId, query, statusFilter, levelFilter, searchDayMode, searchStartDay, searchEndDay, favoriteOnly, mistakeOnly, filterPanelOpen }, quizHistory, quizMistakes, notes: wordNotes, reviews: reviewRecords, favorites: [...favorites] });
         setStorageError("");
       } catch (error) {
         setStorageError(error instanceof Error ? error.message : "紀錄儲存失敗，請先匯出備份。");
       }
     });
     return () => { active = false; };
-  }, [statuses, currentDay, startDate, speechSpeed, theme, fontSize, quizHistory, quizMistakes, wordNotes, reviewRecords, favorites, meaningsHidden, lastWordId, loaded]);
+  }, [statuses, currentDay, startDate, speechSpeed, theme, fontSize, quizHistory, quizMistakes, wordNotes, reviewRecords, favorites, meaningsHidden, lastWordId, query, statusFilter, levelFilter, searchDayMode, searchStartDay, searchEndDay, favoriteOnly, mistakeOnly, filterPanelOpen, loaded]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -480,7 +493,7 @@ export default function Home() {
       app: "詞序 VocabFlow",
       progress: {
         statuses,
-        settings: { currentDay: safeDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize, meaningsHidden, lastWordId },
+        settings: { currentDay: safeDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize, meaningsHidden, lastWordId, query, statusFilter, levelFilter, searchDayMode, searchStartDay, searchEndDay, favoriteOnly, mistakeOnly, filterPanelOpen },
         quizHistory,
         quizMistakes,
         notes: wordNotes,
@@ -501,7 +514,7 @@ export default function Home() {
   }
 
   function currentSnapshot(): ProgressSnapshot {
-    return { statuses, settings: { currentDay: safeDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize, meaningsHidden, lastWordId }, quizHistory, quizMistakes, notes: wordNotes, reviews: reviewRecords, favorites: [...favorites] };
+    return { statuses, settings: { currentDay: safeDay, startDate, speechSpeed, speechSpeedVersion: SPEECH_SPEED_VERSION, theme, fontSize, meaningsHidden, lastWordId, query, statusFilter, levelFilter, searchDayMode, searchStartDay, searchEndDay, favoriteOnly, mistakeOnly, filterPanelOpen }, quizHistory, quizMistakes, notes: wordNotes, reviews: reviewRecords, favorites: [...favorites] };
   }
 
   function applySnapshot(next: ProgressSnapshot) {
@@ -513,6 +526,15 @@ export default function Home() {
     setFontSize(next.settings.fontSize);
     setMeaningsHidden(next.settings.meaningsHidden === true);
     setLastWordId(next.settings.lastWordId);
+    setQuery(next.settings.query ?? "");
+    setStatusFilter(next.settings.statusFilter ?? "all");
+    setLevelFilter(next.settings.levelFilter ?? 0);
+    setSearchDayMode(next.settings.searchDayMode ?? "today");
+    setSearchStartDay(next.settings.searchStartDay ?? next.settings.currentDay);
+    setSearchEndDay(next.settings.searchEndDay ?? next.settings.currentDay);
+    setFavoriteOnly(next.settings.favoriteOnly === true);
+    setMistakeOnly(next.settings.favoriteOnly === true ? false : next.settings.mistakeOnly === true);
+    setFilterPanelOpen(next.settings.filterPanelOpen === true);
     setWordNotes(next.notes);
     setQuizHistory(next.quizHistory);
     setQuizMistakes(next.quizMistakes);
@@ -641,7 +663,7 @@ export default function Home() {
           <button className={`favorite-filter ${favoriteOnly ? "active" : ""}`} aria-pressed={favoriteOnly} onClick={() => { setFavoriteOnly(value => !value); setMistakeOnly(false); setVisibleResultCount(SEARCH_PAGE_SIZE); }}>★ 收藏 {favorites.size}</button>
           </div>
           <button className="speech-mode" onClick={() => setSpeechSpeed(nextSpeechSpeed)} aria-label="切換朗讀速度">
-            <span>▶</span>朗讀：{speechSpeed === "ultraSlow" ? "超慢速" : speechSpeed === "slow" ? "慢速" : "正常"}
+            <span>▶</span>朗讀：{speechSpeed === "ultraSlow" ? "超慢" : speechSpeed === "slow" ? "慢速" : "正常"}
           </button>
           <button className={`meaning-visibility ${meaningsHidden ? "active" : ""}`} onClick={() => { setMeaningsHidden(value => !value); setRevealedMeaningIds(new Set()); }}>{meaningsHidden ? "顯示中文" : "隱藏中文"}</button>
           {searchDayMode === "range" && (

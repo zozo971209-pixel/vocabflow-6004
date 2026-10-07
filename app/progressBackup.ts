@@ -4,7 +4,25 @@ import { deriveQuizMistakes, isQuizMistakeMap, type QuizMistakeMap } from "./qui
 
 export type ProgressSnapshot = {
   statuses: Record<number, QuizWordStatus>;
-  settings: { currentDay: number; startDate: string; speechSpeed: "normal" | "slow" | "ultraSlow"; speechSpeedVersion: number; theme: "light" | "dark"; fontSize: "small" | "normal" | "large"; meaningsHidden?: boolean; lastWordId?: number };
+  settings: {
+    currentDay: number;
+    startDate: string;
+    speechSpeed: "normal" | "slow" | "ultraSlow";
+    speechSpeedVersion: number;
+    theme: "light" | "dark";
+    fontSize: "small" | "normal" | "large";
+    meaningsHidden?: boolean;
+    lastWordId?: number;
+    query?: string;
+    statusFilter?: "all" | QuizWordStatus | "unmarked";
+    levelFilter?: number;
+    searchDayMode?: "today" | "all" | "range";
+    searchStartDay?: number;
+    searchEndDay?: number;
+    favoriteOnly?: boolean;
+    mistakeOnly?: boolean;
+    filterPanelOpen?: boolean;
+  };
   quizHistory: QuizHistoryEntry[];
   notes: Record<number, string>;
   reviews: ReviewMap;
@@ -29,6 +47,15 @@ export function parseProgressBackup(value: unknown, ids: Set<number>, totalDays:
   if (!integer(s.currentDay, 1, totalDays) || !date(s.startDate) || !["normal", "slow", "ultraSlow"].includes(String(s.speechSpeed))) return fail();
   if (s.theme !== undefined && s.theme !== "light" && s.theme !== "dark") return fail();
   if (s.fontSize !== undefined && !["small", "normal", "large"].includes(String(s.fontSize))) return fail();
+  if (s.query !== undefined && (typeof s.query !== "string" || s.query.length > 500)) return fail();
+  if (s.statusFilter !== undefined && !["all", "known", "review", "unknown", "unmarked"].includes(String(s.statusFilter))) return fail();
+  if (s.levelFilter !== undefined && !integer(s.levelFilter, 0, 6)) return fail();
+  if (s.searchDayMode !== undefined && !["today", "all", "range"].includes(String(s.searchDayMode))) return fail();
+  if (s.searchStartDay !== undefined && !integer(s.searchStartDay, 1, totalDays)) return fail();
+  if (s.searchEndDay !== undefined && !integer(s.searchEndDay, 1, totalDays)) return fail();
+  if (s.favoriteOnly !== undefined && typeof s.favoriteOnly !== "boolean") return fail();
+  if (s.mistakeOnly !== undefined && typeof s.mistakeOnly !== "boolean") return fail();
+  if (s.filterPanelOpen !== undefined && typeof s.filterPanelOpen !== "boolean") return fail();
   const notes: ProgressSnapshot["notes"] = {};
   if (p.notes !== undefined) {
     if (!object(p.notes)) return fail();
@@ -74,7 +101,25 @@ export function parseProgressBackup(value: unknown, ids: Set<number>, totalDays:
   return {
     exportedAt: typeof value.exportedAt === "string" && Number.isFinite(Date.parse(value.exportedAt)) ? value.exportedAt : "",
     progress: { statuses, notes, reviews, favorites, quizHistory: history, quizMistakes,
-      settings: { currentDay: s.currentDay, startDate: s.startDate, speechSpeed: s.speechSpeed as ProgressSnapshot["settings"]["speechSpeed"], speechSpeedVersion: typeof s.speechSpeedVersion === "number" ? s.speechSpeedVersion : 0, theme: s.theme === "dark" ? "dark" : "light", fontSize: s.fontSize === "small" || s.fontSize === "large" ? s.fontSize : "normal", meaningsHidden: s.meaningsHidden === true, lastWordId: typeof s.lastWordId === "number" ? s.lastWordId : undefined } },
+      settings: {
+        currentDay: s.currentDay,
+        startDate: s.startDate,
+        speechSpeed: s.speechSpeed as ProgressSnapshot["settings"]["speechSpeed"],
+        speechSpeedVersion: typeof s.speechSpeedVersion === "number" ? s.speechSpeedVersion : 0,
+        theme: s.theme === "dark" ? "dark" : "light",
+        fontSize: s.fontSize === "small" || s.fontSize === "large" ? s.fontSize : "normal",
+        meaningsHidden: s.meaningsHidden === true,
+        lastWordId: typeof s.lastWordId === "number" ? s.lastWordId : undefined,
+        query: typeof s.query === "string" ? s.query : "",
+        statusFilter: ["known", "review", "unknown", "unmarked"].includes(String(s.statusFilter)) ? s.statusFilter as ProgressSnapshot["settings"]["statusFilter"] : "all",
+        levelFilter: typeof s.levelFilter === "number" ? s.levelFilter : 0,
+        searchDayMode: s.searchDayMode === "all" || s.searchDayMode === "range" ? s.searchDayMode : "today",
+        searchStartDay: typeof s.searchStartDay === "number" ? s.searchStartDay : s.currentDay,
+        searchEndDay: typeof s.searchEndDay === "number" ? s.searchEndDay : s.currentDay,
+        favoriteOnly: s.favoriteOnly === true,
+        mistakeOnly: s.favoriteOnly === true ? false : s.mistakeOnly === true,
+        filterPanelOpen: s.filterPanelOpen === true,
+      } },
   };
 }
 
