@@ -16,7 +16,8 @@
     "examples:ai-fallbacks": "node scripts/build-ai-example-fallbacks-public.mjs",
     "examples:ai-audit": "node scripts/audit-ai-example-fallbacks.mjs",
     "examples:publish-source-only": "node scripts/publish-source-only-examples.mjs",
-    "content:audit": "node scripts/audit-learning-content.mjs"
+    "content:audit": "node scripts/audit-learning-content.mjs",
+    "etymology:audit": "node scripts/audit-etymology.mjs"
   },
   "dependencies": {
     "next": "16.2.6",

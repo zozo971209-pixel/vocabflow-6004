@@ -9,6 +9,7 @@ import { AiEnrichmentWord, isAiEnrichmentPayload } from "./aiEnrichment";
 import { BilingualExample, isBilingualExamplePayload } from "./bilingualExamples";
 import { SourceExample, isSourceExamplePayload } from "./sourceExamples";
 import { CanonicalExample, isCanonicalExamplePayload } from "./canonicalExamples";
+import { EtymologyRecord, isEtymologyPayload } from "./etymology";
 import { buildWordFamilyMap } from "./wordEnhancements";
 import { parseMeaningGroups } from "./meaningGroups";
 import { localDate, ReviewMap, scheduleReview } from "./reviewSchedule";
@@ -160,6 +161,7 @@ export default function Home() {
   const [bilingualExamples, setBilingualExamples] = useState<Record<string, BilingualExample[]>>({});
   const [sourceExamples, setSourceExamples] = useState<Record<string, SourceExample[]>>({});
   const [canonicalExamples, setCanonicalExamples] = useState<Record<string, CanonicalExample[]>>({});
+  const [etymologyRecords, setEtymologyRecords] = useState<Record<string, EtymologyRecord>>({});
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(() => typeof window === "undefined" ? null : window.__vocabflowInstallPrompt);
   const [pwaFeedback, setPwaFeedback] = useState<PwaFeedback>(null);
   const [query, setQuery] = useState("");
@@ -201,13 +203,14 @@ export default function Home() {
       fetch(`${BASE_PATH}/bilingual-examples.json`).then((res) => res.json()),
       fetch(`${BASE_PATH}/source-examples.json`).then((res) => res.ok ? res.json() : null).catch(() => null),
       fetch(`${BASE_PATH}/canonical-examples.json`).then((res) => res.ok ? res.json() : null).catch(() => null),
+      fetch(`${BASE_PATH}/etymology.json`).then((res) => res.ok ? res.json() : null).catch(() => null),
       Promise.resolve().then(() => localStorage.getItem(STORAGE_KEY)),
       Promise.resolve().then(() => localStorage.getItem(SETTINGS_KEY)),
       Promise.resolve().then(() => localStorage.getItem(QUIZ_HISTORY_KEY)),
       Promise.resolve().then(() => localStorage.getItem(NOTES_KEY)),
       Promise.resolve().then(() => localStorage.getItem(FAVORITES_KEY)),
       Promise.resolve().then(() => localStorage.getItem(QUIZ_MISTAKES_KEY)),
-    ]).then(([data, enrichment, aiData, exampleData, sourceExampleData, canonicalExampleData, savedStatuses, savedSettings, savedQuizHistory, savedNotes, savedFavorites, savedQuizMistakes]) => {
+    ]).then(([data, enrichment, aiData, exampleData, sourceExampleData, canonicalExampleData, etymologyData, savedStatuses, savedSettings, savedQuizHistory, savedNotes, savedFavorites, savedQuizMistakes]) => {
       const loadedWords = data as Word[];
       setWords(loadedWords);
       if (enrichment && typeof enrichment === "object" && (enrichment as { schemaVersion?: unknown }).schemaVersion === 1) {
@@ -226,6 +229,9 @@ export default function Home() {
       }
       if (isCanonicalExamplePayload(canonicalExampleData)) {
         setCanonicalExamples(canonicalExampleData.words);
+      }
+      if (isEtymologyPayload(etymologyData)) {
+        setEtymologyRecords(etymologyData.records);
       }
       if (savedStatuses) setStatuses(JSON.parse(savedStatuses));
       if (savedSettings) {
@@ -302,7 +308,7 @@ export default function Home() {
     };
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
-      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=24`, { scope: `${BASE_PATH}/`, updateViaCache: "none" })
+      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=25`, { scope: `${BASE_PATH}/`, updateViaCache: "none" })
         .then((registration) => { registration.update().catch(() => undefined); })
         .catch(() => {
           setPwaFeedback({ type: "error", text: "離線功能註冊失敗，請確認網路後重新整理。現有進度不受影響。" });
@@ -751,6 +757,7 @@ export default function Home() {
                   examples={bilingualExamples[String(word.id)] ?? []}
                   sourceExamples={sourceExamples[String(word.id)] ?? []}
                   canonicalExamples={canonicalExamples[String(word.id)] ?? []}
+                  etymology={etymologyRecords[String(word.id)]}
                   personalNote={wordNotes[word.id] ?? ""}
                   onNoteChange={updateWordNote}
                 />

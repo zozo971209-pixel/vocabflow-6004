@@ -539,6 +539,16 @@ html[data-theme="dark"] input[type="date"] { color-scheme: dark; }
 .detail-group[open] > summary::after { content: "−"; }
 .detail-group-content { display: grid; gap: 8px; padding: 0 8px 8px; }
 .detail-group-content section { background: var(--panel); }
+.etymology-content { gap: 8px; }
+.etymology-lead { font-weight: 800; }
+.etymology-facts { display: grid; gap: 7px; margin: 10px 0 0; }
+.etymology-facts div { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px; align-items: start; }
+.etymology-facts dt { color: var(--indigo); font-size: 10px; font-weight: 850; }
+.etymology-facts dd { min-width: 0; margin: 0; color: var(--ink); font-size: 11px; line-height: 1.55; overflow-wrap: anywhere; }
+.word-details-content .etymology-caveat { margin-top: 9px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.etymology-warning { margin-top: 9px !important; padding: 8px; border: 1px solid #f2c879; border-radius: 8px; background: #fff8e8; color: #8a5709 !important; }
+.word-details-content .etymology-sources { margin-top: 9px; color: var(--muted); font-size: 9px; overflow-wrap: anywhere; }
+.etymology-sources a { color: var(--indigo); text-decoration: underline; text-underline-offset: 2px; }
 .note-group .personal-note { display: block; margin: 0 8px 8px; }
 .personal-note { grid-column: auto; }
 
@@ -581,6 +591,7 @@ html[data-theme="dark"] input[type="date"] { color-scheme: dark; }
 html[data-theme="dark"] .compact-stats button, html[data-theme="dark"] .overview-actions button, html[data-theme="dark"] .favorite-filter, html[data-theme="dark"] .meaning-visibility, html[data-theme="dark"] .list-actions button, html[data-theme="dark"] .favorite-button, html[data-theme="dark"] .detail-group, html[data-theme="dark"] .quiz-preset, html[data-theme="dark"] .focus-study, html[data-theme="dark"] .focus-header button, html[data-theme="dark"] .focus-meta button, html[data-theme="dark"] .focus-status button, html[data-theme="dark"] .focus-navigation button { background: var(--panel); color: var(--ink); }
 html[data-theme="dark"] .list-actions .list-quiz-button { border-color: #817cff; background: var(--indigo); color: white; }
 html[data-theme="dark"] .meaning.is-hidden, html[data-theme="dark"] .focus-answer > div { background: #20273a; }
+html[data-theme="dark"] .etymology-warning { border-color: #815d27; background: #352914; color: #f6d58f !important; }
 
 @media (max-width: 960px) {
   .study-overview { grid-template-columns: auto 1fr; }

@@ -44,6 +44,11 @@ export const meaningEditorial: Record<number, EditorialEntry> = {
   },
   4057: {
     headword: "potential",
+    correction: {
+      meaning: "adj. 潛在的, 有潛力的, 可能的\nn. 潛力, 潛能, 可能性",
+      phonetic: "/pəˈtenʃl/",
+      note: "形容詞表示可能發生或具發展能力；名詞表示尚未發揮的能力或可能性。",
+    },
     primary: { adj: ["潛在的", "有潛力的"], n: ["潛力", "潛能", "可能性"] },
     reason: "Cambridge 與 Collins 學習字典收錄一般形容詞與名詞能力／可能性用法，標為 B2；物理專業義不標粗。B2 是學習難度證據，並非考試頻率。",
     sources: ["https://dictionary.cambridge.org/us/dictionary/english/potential", "https://www.collinsdictionary.com/dictionary/english/potential"],

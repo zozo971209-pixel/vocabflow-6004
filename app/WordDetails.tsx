@@ -7,6 +7,7 @@ import { BilingualExample } from "./bilingualExamples";
 import { SourceExample } from "./sourceExamples";
 import { CanonicalExample } from "./canonicalExamples";
 import { contentEditorial, editedEnrichment } from "./contentEditorial";
+import { EtymologyRecord } from "./etymology";
 
 type Props = {
   wordId: number;
@@ -18,6 +19,7 @@ type Props = {
   examples: BilingualExample[];
   sourceExamples: SourceExample[];
   canonicalExamples: CanonicalExample[];
+  etymology?: EtymologyRecord;
   personalNote: string;
   onNoteChange: (wordId: number, note: string) => void;
 };
@@ -91,7 +93,7 @@ function isTeachingPattern(value: string) {
   return /(?:\+|sb\.?|sth\.?|somebody|something|to-infinitive|-ing|that-clause|wh-clause|object|subject)/i.test(value);
 }
 
-export default function WordDetails({ wordId, word, family, records, aiData: originalAiData, aiGlosses: originalGlosses, examples: originalExamples, canonicalExamples, personalNote, onNoteChange }: Props) {
+export default function WordDetails({ wordId, word, family, records, aiData: originalAiData, aiGlosses: originalGlosses, examples: originalExamples, canonicalExamples, etymology, personalNote, onNoteChange }: Props) {
   const aiData = editedEnrichment(wordId, originalAiData);
   const sourceBackedExamples = originalExamples.filter((example) =>
     (example.sourceType === "tatoeba" || example.sourceType === "open-wordnet") && example.qualityScore >= 40,
@@ -144,6 +146,29 @@ export default function WordDetails({ wordId, word, family, records, aiData: ori
             {(verifiedFor(records, ["fixed_phrase"]).length > 0 || aiData?.phrases?.length) ? <section><h4>片語與固定用法</h4><VerifiedItems records={verifiedFor(records, ["fixed_phrase"])} /><LearningList items={aiData?.phrases} glosses={aiGlosses} /></section> : null}
             {(verifiedFor(records, ["synonym", "antonym"]).length > 0 || synonyms.length > 0) ? <section><h4>同義詞與反義詞</h4><VerifiedItems records={verifiedFor(records, ["synonym", "antonym"])} />{synonyms.length ? <><p className="detail-label">同義詞</p><LearningList items={synonyms} glosses={aiGlosses} notes={aiData?.synonymNotes} /></> : null}</section> : null}
             {(verifiedFor(records, ["countability"]).length > 0 || usage.length > 0) ? <section><h4>用法標記</h4><VerifiedItems records={verifiedFor(records, ["countability"])} /><LearningList items={usage} /></section> : null}
+          </div>
+        </details>}
+        {etymology && <details className="detail-group etymology-group">
+          <summary>字首、字根、字尾與歷史詞源</summary>
+          <div className="detail-group-content etymology-content">
+            <section>
+              <h4>原始詞形與來源</h4>
+              <p className="etymology-lead">{etymology.etymon}</p>
+              <dl className="etymology-facts">
+                <div><dt>現代拆解</dt><dd>{etymology.modernSegmentation}</dd></div>
+                <div><dt>歷史構詞</dt><dd>{etymology.historicalComponents}</dd></div>
+                <div><dt>傳承路線</dt><dd>{etymology.languageRoute}</dd></div>
+                <div><dt>語義演變</dt><dd>{etymology.developmentZh}</dd></div>
+              </dl>
+            </section>
+            <section>
+              <h4>學習重點</h4>
+              <p>{etymology.learningNoteZh}</p>
+              <p className="etymology-caveat"><strong>辨識提醒：</strong>{etymology.caveatZh}</p>
+              {etymology.relatedForms.length > 0 && <><p className="detail-label">相關詞形</p><LearningList items={etymology.relatedForms} /></>}
+              {etymology.hasUncertainty && <p className="etymology-warning">部分年代、借入路線或深層來源仍有辭典差異；上方內容已保留限定語，請勿把推測當成唯一結論。</p>}
+              <p className="etymology-sources">來源：{etymology.sources.map((source, index) => <span key={source.url}>{index > 0 && " · "}<a href={source.url} target="_blank" rel="noreferrer">{source.label}</a></span>)}</p>
+            </section>
           </div>
         </details>}
         <details className="detail-group note-group" open={Boolean(personalNote)}>
