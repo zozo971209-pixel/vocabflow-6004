@@ -7,7 +7,7 @@ import { BilingualExample } from "./bilingualExamples";
 import { SourceExample } from "./sourceExamples";
 import { CanonicalExample } from "./canonicalExamples";
 import { contentEditorial, editedEnrichment } from "./contentEditorial";
-import { EtymologyRecord } from "./etymology";
+import { EtymologyRecord, simpleBreakdownFor } from "./etymology";
 
 type Props = {
   wordId: number;
@@ -118,10 +118,7 @@ export default function WordDetails({ wordId, word, family, records, aiData: ori
       <summary><span>例句、搭配與筆記</span><small>{canonicalExamples.length ? `${canonicalExamples.length} 個例句` : "展開學習"}</small></summary>
       <div className="word-details-content">
         <section className="example-panel">
-          {etymology && <div className="etymology-quick">
-            <strong>字首・字根・字尾</strong>
-            <span>{etymology.modernSegmentation}</span>
-          </div>}
+          {etymology && <p className="etymology-quick">{simpleBreakdownFor(etymology)}</p>}
           <h4>例句與用法</h4>
           <VerifiedItems records={verifiedFor(records, ["example"])} />
           {canonicalExamples.length ? <div className="ai-example-list canonical-example-list">{canonicalExamples.map((example) => {
