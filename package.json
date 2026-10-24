@@ -17,7 +17,8 @@
     "examples:ai-audit": "node scripts/audit-ai-example-fallbacks.mjs",
     "examples:publish-source-only": "node scripts/publish-source-only-examples.mjs",
     "content:audit": "node scripts/audit-learning-content.mjs",
-    "etymology:audit": "node scripts/audit-etymology.mjs"
+    "etymology:audit": "node scripts/audit-etymology.mjs",
+    "etymology:simple-test": "node --experimental-strip-types scripts/test-simple-etymology.mjs"
   },
   "dependencies": {
     "next": "16.2.6",
