@@ -308,7 +308,7 @@ export default function Home() {
     };
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
-      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=25`, { scope: `${BASE_PATH}/`, updateViaCache: "none" })
+      navigator.serviceWorker.register(`${BASE_PATH}/sw.js?v=26`, { scope: `${BASE_PATH}/`, updateViaCache: "none" })
         .then((registration) => { registration.update().catch(() => undefined); })
         .catch(() => {
           setPwaFeedback({ type: "error", text: "離線功能註冊失敗，請確認網路後重新整理。現有進度不受影響。" });

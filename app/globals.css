@@ -539,6 +539,9 @@ html[data-theme="dark"] input[type="date"] { color-scheme: dark; }
 .detail-group[open] > summary::after { content: "−"; }
 .detail-group-content { display: grid; gap: 8px; padding: 0 8px 8px; }
 .detail-group-content section { background: var(--panel); }
+.etymology-quick { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px; align-items: start; margin: 0 0 10px; padding: 8px 10px; border: 1px solid #d9dcff; border-radius: 8px; background: #f7f6ff; font-size: 10px; line-height: 1.55; }
+.etymology-quick strong { color: var(--indigo); white-space: nowrap; }
+.etymology-quick span { min-width: 0; color: var(--ink); overflow-wrap: anywhere; }
 .etymology-content { gap: 8px; }
 .etymology-lead { font-weight: 800; }
 .etymology-facts { display: grid; gap: 7px; margin: 10px 0 0; }
@@ -591,6 +594,7 @@ html[data-theme="dark"] input[type="date"] { color-scheme: dark; }
 html[data-theme="dark"] .compact-stats button, html[data-theme="dark"] .overview-actions button, html[data-theme="dark"] .favorite-filter, html[data-theme="dark"] .meaning-visibility, html[data-theme="dark"] .list-actions button, html[data-theme="dark"] .favorite-button, html[data-theme="dark"] .detail-group, html[data-theme="dark"] .quiz-preset, html[data-theme="dark"] .focus-study, html[data-theme="dark"] .focus-header button, html[data-theme="dark"] .focus-meta button, html[data-theme="dark"] .focus-status button, html[data-theme="dark"] .focus-navigation button { background: var(--panel); color: var(--ink); }
 html[data-theme="dark"] .list-actions .list-quiz-button { border-color: #817cff; background: var(--indigo); color: white; }
 html[data-theme="dark"] .meaning.is-hidden, html[data-theme="dark"] .focus-answer > div { background: #20273a; }
+html[data-theme="dark"] .etymology-quick { border-color: #454a73; background: #24283a; }
 html[data-theme="dark"] .etymology-warning { border-color: #815d27; background: #352914; color: #f6d58f !important; }
 
 @media (max-width: 960px) {
